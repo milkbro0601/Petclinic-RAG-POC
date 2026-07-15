@@ -1,0 +1,6 @@
+com/petclinic/rag/config/NvidiaEmbeddingModel$NvidiaEmbeddingData.class
+com/petclinic/rag/config/AiConfig.class
+com/petclinic/rag/RagApplication.class
+com/petclinic/rag/config/NvidiaEmbeddingModel$NvidiaEmbeddingApiResponse.class
+com/petclinic/rag/config/NvidiaEmbeddingModel.class
+com/petclinic/rag/controller/HealthController.class
