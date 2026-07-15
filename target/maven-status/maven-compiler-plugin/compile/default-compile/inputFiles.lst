@@ -3,6 +3,9 @@
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/config/NvidiaEmbeddingModel.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/controller/HealthController.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/controller/IngestController.java
+/Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/controller/QueryController.java
+/Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/dto/QueryRequest.java
+/Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/dto/QueryResponse.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/ChunkingService.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/RagQueryService.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/extraction/DocxExtractor.java
