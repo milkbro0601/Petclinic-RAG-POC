@@ -1,0 +1,27 @@
+package com.petclinic.rag.config;
+
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.SimpleVectorStore;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+@Configuration
+public class AiConfig {
+
+    @Bean
+    @Primary
+    public EmbeddingModel embeddingModel(
+            @Value("${spring.ai.openai.base-url}") String baseUrl,
+            @Value("${spring.ai.openai.api-key}") String apiKey,
+            @Value("${spring.ai.openai.embedding.options.model}") String model) {
+        return new NvidiaEmbeddingModel(baseUrl, apiKey, model);
+    }
+
+    @Bean
+    public VectorStore vectorStore(EmbeddingModel embeddingModel) {
+        return SimpleVectorStore.builder(embeddingModel).build();
+    }
+}
