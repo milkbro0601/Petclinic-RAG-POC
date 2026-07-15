@@ -1,0 +1,9 @@
+POST http://localhost:8081/api/documents
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test.txt"
+Content-Type: text/plain
+
+This is a test document about dogs being loyal companions.
+--WebAppBoundary--
