@@ -5,11 +5,11 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class ExtractFactory {
+public class ExtractorFactory {
 
     private final List<TextExtractor> extractors;
 
-    public ExtractFactory(List<TextExtractor> extractors) {
+    public ExtractorFactory(List<TextExtractor> extractors) {
         this.extractors = extractors;
     }
 
