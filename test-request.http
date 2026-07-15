@@ -54,3 +54,15 @@ Content-Type: application/json
 {
   "question": "What is retrieval augmented generation?"
 }
+
+###
+
+POST http://localhost:8081/api/documents
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="ocr-test.png"
+Content-Type: image/png
+
+< ./ocr-test.png
+--WebAppBoundary--
