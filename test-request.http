@@ -45,3 +45,12 @@ Modern applications of artificial intelligence span numerous domains including n
 
 Retrieval augmented generation has emerged as an important technique for grounding large language model outputs in factual, verifiable information. By combining the generative capabilities of language models with retrieval systems that fetch relevant documents from a knowledge base, RAG systems can produce more accurate and contextually appropriate responses while reducing the tendency of language models to generate plausible sounding but factually incorrect information.
 --WebAppBoundary--
+
+###
+
+POST http://localhost:8081/api/query
+Content-Type: application/json
+
+{
+  "question": "What is retrieval augmented generation?"
+}

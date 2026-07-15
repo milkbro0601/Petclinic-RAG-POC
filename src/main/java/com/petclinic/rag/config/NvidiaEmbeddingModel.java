@@ -47,7 +47,7 @@ public class NvidiaEmbeddingModel implements EmbeddingModel {
         );
 
         NvidiaEmbeddingApiResponse apiResponse = restClient.post()
-                .uri("/v1/embeddings")
+                .uri("/embeddings")
                 .body(body)
                 .retrieve()
                 .body(NvidiaEmbeddingApiResponse.class);
