@@ -1,5 +1,6 @@
 package com.petclinic.rag.controller;
 
+import com.petclinic.rag.service.ChunkingService;
 import com.petclinic.rag.service.extraction.ExtractorFactory;
 import com.petclinic.rag.service.extraction.TextExtractor;
 import org.springframework.ai.document.Document;
@@ -19,10 +20,12 @@ import java.util.Map;
 public class IngestController {
 
     private final ExtractorFactory extractorFactory;
+    private final ChunkingService chunkingService;
     private final VectorStore vectorStore;
 
-    public IngestController(ExtractorFactory extractorFactory, VectorStore vectorStore) {
+    public IngestController(ExtractorFactory extractorFactory, ChunkingService chunkingService, VectorStore vectorStore) {
         this.extractorFactory = extractorFactory;
+        this.chunkingService = chunkingService;
         this.vectorStore = vectorStore;
     }
 
@@ -45,17 +48,19 @@ public class IngestController {
                         .body(Map.of("error", "No text could be extracted from: " + filename));
             }
 
-            // store the whole document as a single chunk. (for this step)
             Document document = new Document(extractedText, Map.of("source", filename));
-            vectorStore.add(List.of(document));
+            List<Document> chunks = chunkingService.chunk(document);
+            vectorStore.add(chunks);
 
             return ResponseEntity.ok(Map.of(
                     "filename", filename,
                     "extractedCharacters", extractedText.length(),
+                    "chunksStored", chunks.size(),
                     "status", "stored"
             ));
 
         } catch (IllegalArgumentException e) {
+            // Thrown by ExtractorFactory when no extractor supports this file type
             return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                     .body(Map.of("error", e.getMessage()));
 
