@@ -32,7 +32,14 @@ public class AiConfig {
     public VectorStore vectorStore(EmbeddingModel embeddingModel) {
         return SimpleVectorStore.builder(embeddingModel).build();
     }
-`   */
+    */
+
+    @Bean
+    public VectorStore vectorStore(
+            @org.springframework.beans.factory.annotation.Qualifier("embeddingModel") EmbeddingModel embeddingModel,
+            @Value("${nvidia.embedding.dimension:2048}") int dimension) {
+        return new com.petclinic.rag.service.vectorstore.JVectorStore(embeddingModel, dimension);
+    }
 
     @Bean
     public VectorStore multimodalVectorStore(
