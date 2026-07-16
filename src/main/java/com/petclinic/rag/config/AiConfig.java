@@ -21,7 +21,21 @@ public class AiConfig {
     }
 
     @Bean
+    public EmbeddingModel multimodalEmbeddingModel(
+            @Value("${spring.ai.openai.base-url}") String baseUrl,
+            @Value("${spring.ai.openai.api-key}") String apiKey,
+            @Value("${nvidia.multimodal-embedding-model}") String model) {
+        return new NvidiaEmbeddingModel(baseUrl, apiKey, model);
+    }
+
+    @Bean
     public VectorStore vectorStore(EmbeddingModel embeddingModel) {
         return SimpleVectorStore.builder(embeddingModel).build();
+    }
+
+    @Bean
+    public VectorStore multimodalVectorStore(
+            @org.springframework.beans.factory.annotation.Qualifier("multimodalEmbeddingModel") EmbeddingModel multimodalEmbeddingModel) {
+        return SimpleVectorStore.builder(multimodalEmbeddingModel).build();
     }
 }

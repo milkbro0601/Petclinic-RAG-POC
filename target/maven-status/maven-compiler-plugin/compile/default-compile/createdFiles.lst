@@ -7,6 +7,7 @@ com/petclinic/rag/service/RagQueryService.class
 com/petclinic/rag/service/ChunkingService.class
 com/petclinic/rag/service/extraction/DocxExtractor.class
 com/petclinic/rag/service/extraction/ExtractorFactory.class
+com/petclinic/rag/service/extraction/ImageOcrExtractor.class
 com/petclinic/rag/dto/QueryRequest.class
 com/petclinic/rag/service/extraction/DocxExtractor$1.class
 com/petclinic/rag/controller/IngestController.class
