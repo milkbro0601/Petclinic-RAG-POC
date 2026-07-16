@@ -27,11 +27,12 @@ public class AiConfig {
             @Value("${nvidia.multimodal-embedding-model}") String model) {
         return new NvidiaEmbeddingModel(baseUrl, apiKey, model);
     }
-
+    /*
     @Bean
     public VectorStore vectorStore(EmbeddingModel embeddingModel) {
         return SimpleVectorStore.builder(embeddingModel).build();
     }
+`   */
 
     @Bean
     public VectorStore multimodalVectorStore(
