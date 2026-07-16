@@ -132,3 +132,279 @@ Documenting these because each one was a real, non-obvious issue worth rememberi
 - No deduplication — re-uploading the same file creates duplicate chunks.
 - No authentication/authorization on any endpoint.
 - Chunking always uses default parameters; not yet tuned per file type.
+
+---
+
+# Vector Store Comparison — Live Demo Runbook
+### SimpleVectorStore vs PGvector vs JVector
+
+This is a step-by-step script for demoing all three vector store implementations to your team lead. Each section is self-contained: setup → run → test → expected output → how to switch to the next one.
+
+---
+
+## Before you start: one-time prep
+
+Have three terminal tabs ready:
+- **Tab 1**: Docker commands
+- **Tab 2**: `application.properties` editing / IntelliJ
+- **Tab 3**: curl test commands
+
+---
+
+## PART 1 — SimpleVectorStore (baseline, in-memory, zero setup)
+
+This is your original PoC store — no external infra, Spring AI's own built-in implementation.
+
+### 1.1 Config: enable SimpleVectorStore
+
+In `AiConfig.java`, comment out **both** the PGvector and JVector `vectorStore` beans, and uncomment the SimpleVectorStore one:
+
+```java
+@Bean
+public VectorStore vectorStore(EmbeddingModel embeddingModel) {
+    return SimpleVectorStore.builder(embeddingModel).build();
+}
+```
+
+### 1.2 Config: application.properties
+
+No `spring.autoconfigure.exclude` needed here (SimpleVectorStore doesn't conflict with anything). Postgres `spring.datasource.*` properties can stay commented out — not needed for this store.
+
+### 1.3 No Docker needed
+
+SimpleVectorStore requires zero external infrastructure. Skip Docker entirely for this demo section.
+
+### 1.4 Run the app
+
+Start `RagApplication` in IntelliJ as normal.
+
+### 1.5 Test — ingest
+
+```bash
+curl -X POST http://localhost:8081/api/documents \
+  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
+```
+**Expected:** `{"filename":"test.txt","status":"stored","extractedCharacters":8367,"chunksStored":2}`
+
+### 1.6 Test — query
+
+```bash
+curl -X POST http://localhost:8081/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is retrieval augmented generation?"}'
+```
+**Expected:** grounded answer with `"sources":["test.txt"]`
+
+### 1.7 Test — restart persistence
+
+Stop the app in IntelliJ, restart it, **without re-uploading test.txt**, run the same query curl again.
+
+**Expected result: EMPTY** — `"answer":"I don't have any relevant documents..."`, `"sources":[]`
+
+**Key talking point:** SimpleVectorStore is in-memory only, by Spring AI's own design (their docs explicitly say "not for production use"). This is your original placeholder — confirms why Task 1 exists at all.
+
+---
+
+## PART 2 — PGvector (official Spring AI support, external Postgres)
+
+### 2.1 Start Postgres in Docker
+
+```bash
+docker start pgvector-test
+```
+(If the container doesn't exist yet, create it first — see Appendix A.)
+
+Verify it's running:
+```bash
+docker ps
+```
+Should show `pgvector-test` as `Up`.
+
+### 2.2 Config: application.properties
+
+Uncomment the Postgres datasource block:
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+
+spring.ai.vectorstore.pgvector.initialize-schema=true
+spring.ai.vectorstore.pgvector.index-type=HNSW
+spring.ai.vectorstore.pgvector.distance-type=COSINE_DISTANCE
+spring.ai.vectorstore.pgvector.dimensions=2048
+```
+
+Comment out (or remove) the `spring.autoconfigure.exclude` line entirely — PGvector's auto-configuration needs to run.
+
+### 2.3 Config: AiConfig.java
+
+Comment out **both** the SimpleVectorStore bean and the JVector bean — leave **no explicit `vectorStore` bean at all**. This lets Spring AI's `PgVectorStoreAutoConfiguration` auto-create the `PgVectorStore` bean.
+
+### 2.4 Run the app
+
+Start `RagApplication` in IntelliJ.
+
+### 2.5 Test — ingest
+
+```bash
+curl -X POST http://localhost:8081/api/documents \
+  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
+```
+**Expected:** same shape response, `chunksStored: 2`.
+
+### 2.6 Verify data actually landed in Postgres (impressive live demo moment)
+
+```bash
+docker exec -it pgvector-test psql -U postgres -c "SELECT count(*) FROM vector_store;"
+```
+**Expected:** count matches your chunk count (2).
+
+### 2.7 Test — query
+
+```bash
+curl -X POST http://localhost:8081/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is retrieval augmented generation?"}'
+```
+**Expected:** grounded answer with `"sources":["test.txt"]`
+
+### 2.8 Test — restart persistence (the big differentiator)
+
+Stop the Spring Boot app, restart it, **without re-uploading test.txt**, run the query curl again.
+
+**Expected result: STILL WORKS** — same grounded answer, same source. This is the payoff moment of the whole demo.
+
+### 2.9 Test — multimodal regression check
+
+```bash
+curl -X POST http://localhost:8081/api/documents/multimodal-image \
+  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/ocr-test.png"
+```
+**Expected:** `{"strategy":"multimodal-embedding","status":"stored",...}` — confirms the separate `multimodalVectorStore` bean is unaffected.
+
+---
+
+## PART 3 — JVector (embedded, no infra, custom-built)
+
+### 3.1 Stop Postgres (to genuinely prove "zero external infra")
+
+```bash
+docker stop pgvector-test
+```
+This step matters — leaving Postgres running would hide the fact that JVector doesn't need it.
+
+### 3.2 Config: application.properties
+
+Comment OUT the Postgres datasource block again:
+```properties
+# spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
+# spring.datasource.username=postgres
+# spring.datasource.password=postgres
+```
+
+Add the exclude line (prevents PGvector AND the JDBC/DataSource auto-configuration from trying to connect):
+```properties
+spring.autoconfigure.exclude=org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration,org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.data.jdbc.autoconfigure.DataJdbcRepositoriesAutoConfiguration
+```
+
+(Optional, for full JVector SIMD performance — add as a VM option in IntelliJ's run config: `--add-modules jdk.incubator.vector`)
+
+### 3.3 Config: AiConfig.java
+
+Comment out the SimpleVectorStore bean and the PGvector bean. Uncomment/keep active the JVector bean:
+```java
+@Bean
+public VectorStore vectorStore(
+        @Qualifier("embeddingModel") EmbeddingModel embeddingModel,
+        @Value("${nvidia.embedding.dimension:2048}") int dimension) {
+    return new com.petclinic.rag.service.vectorstore.JVectorStore(embeddingModel, dimension);
+}
+```
+
+### 3.4 Run the app
+
+Start `RagApplication` in IntelliJ. **Confirm it starts successfully with Postgres fully stopped** — this itself is the "zero external infra" proof.
+
+### 3.5 Test — ingest
+
+```bash
+curl -X POST http://localhost:8081/api/documents \
+  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
+```
+**Expected:** same shape response, `chunksStored: 2`.
+
+### 3.6 Test — query
+
+```bash
+curl -X POST http://localhost:8081/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is retrieval augmented generation?"}'
+```
+**Expected:** grounded answer with `"sources":["test.txt"]`
+
+### 3.7 Test — restart persistence (expected to fail — this is the finding)
+
+Stop the app, restart it, **without re-uploading test.txt**, run the query curl again.
+
+**Expected result: EMPTY** — `"answer":"I don't have any relevant documents..."`, `"sources":[]`
+
+**Key talking point:** JVector is an embedded, in-memory library — data lives inside the JVM process, not in a separate database. When the process ends, the data goes with it. (JVector does support on-disk persistence via `OnDiskGraphIndex`, not implemented in this PoC — flagged as a follow-up item, not a limitation of the library itself.)
+
+### 3.8 Test — multimodal regression check
+
+```bash
+curl -X POST http://localhost:8081/api/documents/multimodal-image \
+  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/ocr-test.png"
+```
+**Expected:** same success response — confirms JVector swap didn't break the untouched multimodal path.
+
+---
+
+## PART 4 — Query latency comparison (optional, nice bonus stat)
+
+Run this same command against each store while it's active, right after ingesting test.txt:
+
+```bash
+curl -w "\n%{time_total}\n" -X POST http://localhost:8081/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is retrieval augmented generation?"}'
+```
+
+The number after the JSON response is total request time in seconds. Record it for each store.
+
+---
+
+## Comparison Table (fill in during/after demo)
+
+| Criterion | SimpleVectorStore | PGvector | JVector |
+|---|---|---|---|
+| Spring AI official support | Yes (built-in) | Yes (starter) | None — custom |
+| External infra required | None | Postgres (Docker) | None |
+| Setup time | Instant | ~15 min (docker + deps + properties) | ~1 hr (custom class + debugging) |
+| Lines of custom code | 0 | 0 | ~180 |
+| Persistence across restarts | No | **Yes** | No (not implemented) |
+| Query latency | ___ sec | ___ sec | ___ sec |
+| Documentation quality | Excellent (official) | Excellent (official) | Pre-GA, docs lag actual API |
+| Production-ready | No (Spring AI's own docs say so) | Yes | No (this PoC's implementation) |
+
+---
+
+## Appendix A — Docker command to (re)create the PGvector container from scratch
+
+Only needed if `pgvector-test` doesn't exist yet (e.g. fresh machine):
+
+```bash
+docker run -d --name pgvector-test \
+  -p 5432:5432 \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -v pgvector-data:/var/lib/postgresql/data \
+  pgvector/pgvector:pg16
+```
+
+## Appendix B — Quick reference: which bean is active
+
+Only ever have **one** of these three uncommented in `AiConfig.java` at a time:
+1. `SimpleVectorStore.builder(...)` bean
+2. No bean at all (PGvector auto-config takes over) — remove the `spring.autoconfigure.exclude` line
+3. `new JVectorStore(...)` bean — add the `spring.autoconfigure.exclude` line, stop Postgres
