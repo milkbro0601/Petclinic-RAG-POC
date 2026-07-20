@@ -21,10 +21,48 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "2:36411623311042744",
+      "lastPropertyId": "5:8682004143501372655",
+      "name": "VectorDocumentEntity",
+      "properties": [
+        {
+          "id": "1:1705002786904377421",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5124878147911017512",
+          "name": "docId",
+          "indexId": "1:4243298934357791936",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:2292634671297503930",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "4:2698728891328297596",
+          "name": "source",
+          "type": 9
+        },
+        {
+          "id": "5:8682004143501372655",
+          "name": "embedding",
+          "indexId": "2:7024569012367266284",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "1:627875331511651370",
-  "lastIndexId": "0:0",
+  "lastEntityId": "2:36411623311042744",
+  "lastIndexId": "2:7024569012367266284",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

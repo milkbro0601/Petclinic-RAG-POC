@@ -27,6 +27,7 @@ public class AiConfig {
             @Value("${nvidia.multimodal-embedding-model}") String model) {
         return new NvidiaEmbeddingModel(baseUrl, apiKey, model);
     }
+
     /*
     // PGvector — currently INACTIVE. To switch back to PGvector: comment out the
     // vectorStore bean below, remove/comment the spring.autoconfigure.exclude line
@@ -53,12 +54,16 @@ public class AiConfig {
         return new com.petclinic.rag.service.vectorstore.JVectorStore(embeddingModel, dimension);
     }
     */
+
+    /*
+    // ObjectBox - currently InACTIVE.
     @Bean
     public VectorStore vectorStore(
             @org.springframework.beans.factory.annotation.Qualifier("embeddingModel") EmbeddingModel embeddingModel,
             @Value("${objectbox.db-directory:objectbox-data}") String dbDirectory) {
         return new com.petclinic.rag.service.vectorstore.ObjectBoxVectorStore(embeddingModel, dbDirectory);
     }
+    */
 
     @Bean
     public VectorStore multimodalVectorStore(

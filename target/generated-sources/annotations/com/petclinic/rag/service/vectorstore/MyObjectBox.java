@@ -21,7 +21,6 @@ public class MyObjectBox {
 
     public static BoxStoreBuilder builder() {
         BoxStoreBuilder builder = new BoxStoreBuilder(getModel());
-        builder.entity(CodeTestEntity_.__INSTANCE);
         builder.entity(VectorDocumentEntity_.__INSTANCE);
         return builder;
     }
@@ -32,24 +31,9 @@ public class MyObjectBox {
         modelBuilder.lastIndexId(2, 7024569012367266284L);
         modelBuilder.lastRelationId(0, 0L);
 
-        buildEntityCodeTestEntity(modelBuilder);
         buildEntityVectorDocumentEntity(modelBuilder);
 
         return modelBuilder.build();
-    }
-
-    private static void buildEntityCodeTestEntity(ModelBuilder modelBuilder) {
-        EntityBuilder entityBuilder = modelBuilder.entity("CodeTestEntity");
-        entityBuilder.id(1, 627875331511651370L).lastPropertyId(2, 2746573345727718149L);
-        entityBuilder.flags(io.objectbox.model.EntityFlags.USE_NO_ARG_CONSTRUCTOR);
-
-        entityBuilder.property("id", PropertyType.Long)
-                .id(1, 123314739773434237L)
-                .flags(PropertyFlags.ID);
-        entityBuilder.property("note", PropertyType.String)
-                .id(2, 2746573345727718149L);
-
-        entityBuilder.entityDone();
     }
 
     private static void buildEntityVectorDocumentEntity(ModelBuilder modelBuilder) {
