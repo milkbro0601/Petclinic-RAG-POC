@@ -3,8 +3,8 @@
 A backend-only Retrieval-Augmented Generation (RAG) proof of concept built with Spring Boot. Ingests documents (TXT, DOCX, images), generates embeddings, stores them in a vector database, and answers user questions through semantic retrieval + LLM generation.
 
 Built as a learning project and team task, covering two objectives:
-- **Task 1**: Research and evaluate a few vector database implementations (Java/Node.js ecosystem)
-- **Task 2**: Build a working program that ingests files and loads them into a vector DB
+- **Task 1**: Research and evaluate vector database implementations (Java ecosystem) — ✅ **Complete**
+- **Task 2**: Build a working program that ingests files and loads them into a vector DB — ✅ **Complete**
 
 ---
 
@@ -17,7 +17,7 @@ Built as a learning project and team task, covering two objectives:
 | Chat model | `meta/llama-3.1-8b-instruct` | Fast, reliable — see [Key Learnings](#key-learnings--debugging-log) for why the 70B model was dropped |
 | Text embedding model | `nvidia/llama-nemotron-embed-1b-v2` | Handles asymmetric query/passage embeddings |
 | Multimodal (image) embedding model | `nvidia/llama-nemotron-embed-vl-1b-v2` | Embeds images directly, no OCR needed |
-| Vector store (current) | `SimpleVectorStore` (Spring AI, in-memory) | Zero-setup baseline used to build and validate the pipeline; **not the final Task 1 choice** — see [Task 1 Status](#task-1-status) |
+| **Vector store (final choice)** | **PGvector** (`spring-ai-starter-vector-store-pgvector`) | Official Spring AI support, genuine restart persistence, zero custom code. See [Task 1: Vector Store Comparison](#task-1-vector-store-comparison) for the full evaluation against JVector, ObjectBox, and the original `SimpleVectorStore` baseline. |
 | Text extraction | Apache Tika (`spring-ai-tika-document-reader`) | Handles DOCX/TXT parsing |
 | Image OCR | Tesseract via Tess4J | Extracts literal text from images |
 | Text splitting | Spring AI `TokenTextSplitter` | Token-aware chunking (not naive character count) |
@@ -55,6 +55,10 @@ com.petclinic.rag
 │   │   ├── DocxExtractor          — wraps Apache Tika
 │   │   ├── ImageOcrExtractor      — wraps Tesseract/Tess4J
 │   │   └── ExtractorFactory       — picks the right extractor by filename
+│   ├── vectorstore/
+│   │   ├── JVectorStore           — custom VectorStore impl (Task 1 candidate)
+│   │   ├── VectorDocumentEntity   — ObjectBox @Entity for vector-indexed chunks
+│   │   └── ObjectBoxVectorStore   — custom VectorStore impl (Task 1 candidate)
 │   ├── ChunkingService            — wraps TokenTextSplitter
 │   ├── MultimodalImageService     — handles the image-embedding-only path
 │   └── RagQueryService            — orchestrates retrieval + LLM answer
@@ -62,7 +66,7 @@ com.petclinic.rag
 │   ├── QueryRequest
 │   └── QueryResponse
 └── config/
-    ├── AiConfig                   — embedding model + vector store beans
+    ├── AiConfig                   — embedding model + vector store beans (see Appendix B for toggling between stores)
     └── NvidiaEmbeddingModel       — custom EmbeddingModel (see Key Learnings)
 ```
 
@@ -83,20 +87,47 @@ com.petclinic.rag
 | Image OCR extraction | ✅ Done | Generated a test image with known text, uploaded it, OCR extracted 74 characters matching the source sentence, query correctly retrieved and answered from it |
 | Multimodal image embedding | ✅ Done | Verified via curl against NVIDIA directly first, then confirmed working through the app's `/api/documents/multimodal-image` endpoint |
 
-**Summary**: both pipelines (ingestion and retrieval) are functionally complete and tested end-to-end across all required file types (TXT, DOCX, PNG/JPG via two different strategies).
+**Summary**: both pipelines (ingestion and retrieval) are functionally complete and tested end-to-end across all required file types (TXT, DOCX, PNG/JPG via two different strategies), and re-verified working against the final chosen vector store (PGvector).
 
 ---
 
-## Task 1 Status
+## Task 1: Vector Store Comparison
 
-**Not yet started.** Everything above was built against `SimpleVectorStore` — an in-memory, zero-setup vector store — deliberately chosen to build and validate the application logic quickly without fighting infrastructure setup while debugging embedding/chat model configuration.
+Four `VectorStore` implementations were built and tested end-to-end against the exact same ingestion/retrieval pipeline: the original `SimpleVectorStore` baseline, **PGvector** (official Spring AI support), and two fully custom implementations — **JVector** and **ObjectBox** — written by hand against Spring AI's `VectorStore` interface, since neither library has first-party Spring AI integration.
 
-**Next steps for Task 1**:
-1. Set up and test 2-3 candidate vector DBs from the team's list (JVector, PGvector, H2, ObjectBox)
-2. Swap each in as the `VectorStore` bean (same interface — ingestion/query code doesn't change)
-3. Re-run the existing upload/query tests against each
-4. Document comparison: setup effort, API ergonomics, persistence, performance
-5. `SimpleVectorStore`'s own limitation (in-memory, wiped on every restart) is itself a useful data point for this comparison
+### Recommendation: PGvector
+
+**PGvector is the recommended choice for taking this RAG system toward production.**
+
+Reasoning:
+- **It's the only store with zero unresolved gaps.** Every test — ingestion, grounded retrieval, restart persistence, multimodal regression — passed cleanly. JVector has a real, currently-unresolved persistence gap. ObjectBox works well but carries more inherent risk (a less-mature Maven story, native platform binaries per OS).
+- **"Official support" translated into real, measurable value during this evaluation.** Every problem hit while building JVector and ObjectBox — Spring bean collisions, wrong class names, missing setup folders, auto-configuration exclusion traps — came from having to hand-roll behavior that Spring AI's PGvector integration simply handles for free. That's exactly the kind of ongoing maintenance burden a team inherits long after a PoC ships.
+- **The "needs Docker/Postgres" cost is real but manageable.** Nearly every production Java team already operates Postgres somewhere — it's ordinary, well-understood infrastructure, not an exotic dependency. That cost is far smaller than owning and maintaining custom `VectorStore` code indefinitely.
+- **JVector and ObjectBox remain valuable secondary findings**, not dead ends. If a future requirement genuinely needs zero external infrastructure (e.g. an offline or edge deployment), ObjectBox is the stronger candidate of the two custom builds — it just needs the same level of production hardening PGvector already has by default.
+
+### Comparison Table
+
+| Criterion | SimpleVectorStore | PGvector | JVector | ObjectBox |
+|---|---|---|---|---|
+| Spring AI official support | Yes (built-in) | Yes (starter) | None — custom | None — custom |
+| External infra required | None | Postgres (Docker) | None | None |
+| Setup time | Instant | ~15 min (docker + deps + properties) | ~1 hr (custom class + debugging) | ~2 hr (Maven annotation-processor setup + entity + class-naming debugging) |
+| Lines of custom code | 0 | 0 | ~180 | ~150 (entity + store) |
+| Persistence across restarts | No | **Yes** | No (not implemented) | **Yes** (confirmed, built-in) |
+| Native platform binaries required | No | No (server-side only) | No (pure Java) | **Yes** (macOS/Linux/Windows-specific) |
+| Query latency | Comparable across all four in informal testing — not a meaningful differentiator at this data scale | | | |
+| Documentation quality | Excellent (official) | Excellent (official) | Pre-GA, docs lag actual API | Good, but Maven path is secondary to Gradle |
+| Production-ready | No (Spring AI's own docs say so) | Yes | No (this PoC's implementation) | Closer than JVector — real persistence, but Maven tooling risk noted |
+
+### Per-store findings
+
+**SimpleVectorStore (baseline)** — Spring AI's own in-memory implementation, used to build and validate the ingestion/retrieval pipeline before Task 1 began. Confirmed wiped on every restart, exactly as Spring AI's own documentation states. Not a real candidate — establishes the floor the other three are compared against.
+
+**PGvector** — Official `spring-ai-starter-vector-store-pgvector`. Setup: run Postgres via Docker, add two Maven dependencies, set `spring.datasource.*` and `spring.ai.vectorstore.pgvector.*` properties. No custom code needed — Spring AI's auto-configuration creates the `PgVectorStore` bean automatically as long as no manual `vectorStore` bean is defined and no `spring.autoconfigure.exclude` entry blocks it (see Key Learnings #14 — this exact trap was hit and fixed during testing). Restart persistence confirmed by direct `psql` inspection of the `vector_store` table, not just by the app continuing to return correct answers.
+
+**JVector** — `io.github.jbellis:jvector`, a pre-GA (`4.0.0-rc.8-hf1`) embedded ANN graph-index library with no Spring AI integration. Required a full custom `VectorStore` implementation. Key limitation: `GraphIndexBuilder` is a batch-build API, not a live incremental-insert API like PGvector's `INSERT` — this PoC's implementation rebuilds the entire graph on every `add()` call, a reasonable shortcut for a PoC but a real cost at scale. No persistence layer was implemented (JVector does support this via `OnDiskGraphIndex`, flagged as a follow-up, not attempted here). Confirmed via both a fake-embedding standalone smoke test and the full app with real NVIDIA embeddings that restart wipes all data, as expected for an in-memory-only design.
+
+**ObjectBox** — `io.objectbox:objectbox-java`, a full embedded NoSQL object database with a built-in HNSW vector index (`@HnswIndex` on a `float[]` entity field). The riskiest candidate going in, since ObjectBox's actively-maintained tooling is Gradle-based — the dedicated Maven plugin (`objectbox-maven-plugin`) hasn't been updated since 2022. That risk was resolved by using ObjectBox's officially documented alternative Maven path: wiring the `objectbox-processor` annotation processor directly into `maven-compiler-plugin`, which does not depend on the stale plugin at all. Required a one-time `objectbox-models/` folder creation and one class-naming correction (`VectorDistanceType`, not the Swift-binding name `HnswDistanceType`, which doesn't exist in the Java API). The only one of the three custom builds with genuine, confirmed persistence — proven via a standalone smoke test that closed and reopened the same on-disk database directory without any Spring context involved, and reconfirmed through the full live app after a real restart. Ships native platform binaries per OS (`objectbox-macos` in this project) — a real deployment consideration PGvector and JVector don't share.
 
 ---
 
@@ -124,6 +155,24 @@ Documenting these because each one was a real, non-obvious issue worth rememberi
 
 10. **Always verify third-party API contracts with `curl` before writing app code against them** — this caught real issues (wrong request shape, missing fields, wrong URLs) faster than debugging through the full Spring stack trace each time.
 
+11. **Spring Boot 4's bean-definition-overriding is disabled by default.** Defining a manual `vectorStore` bean while Spring AI's `PgVectorStoreAutoConfiguration` also tries to create one under the same name throws `BeanDefinitionOverrideException` at startup — the auto-configuration does NOT gracefully back off on its own via `@ConditionalOnMissingBean` the way expected. Fix: explicitly exclude it via `spring.autoconfigure.exclude=org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration` whenever a custom `vectorStore` bean is active.
+
+12. **That exclude property must be kept in sync with `AiConfig.java` manually — it is not self-correcting.** Removing a custom `vectorStore` bean from `AiConfig.java` does NOT automatically restore PGvector's auto-configured bean if the exclude line is still present in `application.properties`. When this happened, Spring AI silently fell back to `SimpleVectorStore` with no error at all — the app kept working, just against the wrong store, which is a much easier mistake to miss than an outright crash. Treat these two files as one linked toggle, not two independent settings.
+
+13. **Two separate `<plugin>` blocks for the same Maven plugin (same groupId/artifactId) in one `pom.xml` collide.** Adding ObjectBox's annotation processor as a second, separate `maven-compiler-plugin` block silently broke Lombok's existing annotation processing. Fix: merge both processors into the same `<execution>`'s `<annotationProcessorPaths>`, not separate plugin declarations.
+
+14. **ObjectBox's Java distance-type enum is `io.objectbox.annotation.VectorDistanceType`, not `HnswDistanceType`.** The latter name only exists in ObjectBox's Swift binding — an easy cross-language mix-up when researching the API via search results that don't clearly separate bindings.
+
+15. **ObjectBox's official, currently-maintained Maven setup does NOT require the dedicated `objectbox-maven-plugin`** (last released 2022) for basic use — only for making entity *relations* easier to use. A flat entity with no relations only needs the `objectbox-processor` wired into `maven-compiler-plugin`'s annotation processor paths, sidestepping the stale-plugin risk entirely.
+
+16. **ObjectBox requires a manually-created `objectbox-models/` folder before the first compile** — the annotation processor writes its schema JSON there and fails loudly (not silently) if the folder doesn't already exist. This folder should be committed to git (it's ObjectBox's source of truth for stable entity IDs across schema changes); `objectbox-data/` (the actual database files) should not be.
+
+17. **JVector's `GraphSearcher.getNodes()` returns a raw `NodeScore[]` array, not a `List`** — needed `Arrays.stream(...)` rather than calling `.stream()` directly. Similarly, `SearchRequest.getSimilarityThreshold()` returns a primitive `double` (default `0.0`, meaning "accept everything"), not a nullable `Double` — no null-check needed or possible.
+
+18. **ObjectBox's `nearestNeighbors()` returns a distance-based score (lower = more similar)**, the opposite direction from JVector's and PGvector's cosine similarity (higher = more similar) — any similarity-threshold filtering logic must account for this inversion per store.
+
+19. **IntelliJ run configurations do not inherit shell environment variables** (like `NVIDIA_API_KEY` exported in `.zshrc`) — they must be set explicitly per run configuration (or in the shared configuration template) inside IntelliJ, or the app fails at startup with a `PlaceholderResolutionException`.
+
 ---
 
 ## Known Simplifications (for a POC, not production)
@@ -132,13 +181,16 @@ Documenting these because each one was a real, non-obvious issue worth rememberi
 - No deduplication — re-uploading the same file creates duplicate chunks.
 - No authentication/authorization on any endpoint.
 - Chunking always uses default parameters; not yet tuned per file type.
+- JVector's implementation rebuilds its entire graph index on every `add()` call rather than inserting incrementally — acceptable for PoC-scale document counts, not for production volume.
+- Neither JVector's nor ObjectBox's custom `VectorStore` implementations support Spring AI's metadata `Filter.Expression` delete/search API — both currently throw `UnsupportedOperationException` for that path.
+- JVector has no persistence layer implemented in this PoC (data is lost on every restart) — a real follow-up task, not a limitation of the JVector library itself.
 
 ---
 
 # Vector Store Comparison — Live Demo Runbook
-### SimpleVectorStore vs PGvector vs JVector
+### SimpleVectorStore vs PGvector vs JVector vs ObjectBox
 
-This is a step-by-step script for demoing all three vector store implementations to your team lead. Each section is self-contained: setup → run → test → expected output → how to switch to the next one.
+This is a step-by-step script for demoing all four vector store implementations. Each section is self-contained: setup → run → test → expected output → how to switch to the next one.
 
 ---
 
@@ -153,12 +205,9 @@ Have three terminal tabs ready:
 
 ## PART 1 — SimpleVectorStore (baseline, in-memory, zero setup)
 
-This is your original PoC store — no external infra, Spring AI's own built-in implementation.
+### 1.1 Config: AiConfig.java
 
-### 1.1 Config: enable SimpleVectorStore
-
-In `AiConfig.java`, comment out **both** the PGvector and JVector `vectorStore` beans, and uncomment the SimpleVectorStore one:
-
+Comment out the PGvector, JVector, and ObjectBox `vectorStore` beans, and uncomment the SimpleVectorStore one:
 ```java
 @Bean
 public VectorStore vectorStore(EmbeddingModel embeddingModel) {
@@ -168,61 +217,36 @@ public VectorStore vectorStore(EmbeddingModel embeddingModel) {
 
 ### 1.2 Config: application.properties
 
-No `spring.autoconfigure.exclude` needed here (SimpleVectorStore doesn't conflict with anything). Postgres `spring.datasource.*` properties can stay commented out — not needed for this store.
+No `spring.autoconfigure.exclude` needed. Postgres `spring.datasource.*` properties can stay commented out.
 
-### 1.3 No Docker needed
-
-SimpleVectorStore requires zero external infrastructure. Skip Docker entirely for this demo section.
-
-### 1.4 Run the app
-
-Start `RagApplication` in IntelliJ as normal.
-
-### 1.5 Test — ingest
+### 1.3 Run and test
 
 ```bash
-curl -X POST http://localhost:8081/api/documents \
-  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
-```
-**Expected:** `{"filename":"test.txt","status":"stored","extractedCharacters":8367,"chunksStored":2}`
-
-### 1.6 Test — query
-
-```bash
-curl -X POST http://localhost:8081/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is retrieval augmented generation?"}'
+curl -X POST http://localhost:8081/api/documents -F "file=@test.txt"
+curl -X POST http://localhost:8081/api/query -H "Content-Type: application/json" -d '{"question": "What is retrieval augmented generation?"}'
 ```
 **Expected:** grounded answer with `"sources":["test.txt"]`
 
-### 1.7 Test — restart persistence
+### 1.4 Restart persistence test
 
-Stop the app in IntelliJ, restart it, **without re-uploading test.txt**, run the same query curl again.
+Stop the app, restart it, run the same query curl **without re-uploading**.
 
-**Expected result: EMPTY** — `"answer":"I don't have any relevant documents..."`, `"sources":[]`
-
-**Key talking point:** SimpleVectorStore is in-memory only, by Spring AI's own design (their docs explicitly say "not for production use"). This is your original placeholder — confirms why Task 1 exists at all.
+**Expected: EMPTY** — `"sources":[]`. In-memory only, by Spring AI's own design.
 
 ---
 
-## PART 2 — PGvector (official Spring AI support, external Postgres)
+## PART 2 — PGvector (official support, external Postgres)
 
-### 2.1 Start Postgres in Docker
+### 2.1 Start Postgres
 
 ```bash
 docker start pgvector-test
 ```
-(If the container doesn't exist yet, create it first — see Appendix A.)
-
-Verify it's running:
-```bash
-docker ps
-```
-Should show `pgvector-test` as `Up`.
+(First time on a fresh machine — see Appendix A.)
 
 ### 2.2 Config: application.properties
 
-Uncomment the Postgres datasource block:
+Remove/comment the `spring.autoconfigure.exclude` line entirely. Uncomment:
 ```properties
 spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
 spring.datasource.username=postgres
@@ -234,84 +258,52 @@ spring.ai.vectorstore.pgvector.distance-type=COSINE_DISTANCE
 spring.ai.vectorstore.pgvector.dimensions=2048
 ```
 
-Comment out (or remove) the `spring.autoconfigure.exclude` line entirely — PGvector's auto-configuration needs to run.
-
 ### 2.3 Config: AiConfig.java
 
-Comment out **both** the SimpleVectorStore bean and the JVector bean — leave **no explicit `vectorStore` bean at all**. This lets Spring AI's `PgVectorStoreAutoConfiguration` auto-create the `PgVectorStore` bean.
+Comment out **all** custom `vectorStore` beans — leave none defined at all, so PGvector's auto-configuration creates the bean.
 
-### 2.4 Run the app
-
-Start `RagApplication` in IntelliJ.
-
-### 2.5 Test — ingest
+### 2.4 Run and test
 
 ```bash
-curl -X POST http://localhost:8081/api/documents \
-  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
-```
-**Expected:** same shape response, `chunksStored: 2`.
-
-### 2.6 Verify data actually landed in Postgres (impressive live demo moment)
-
-```bash
+curl -X POST http://localhost:8081/api/documents -F "file=@test.txt"
 docker exec -it pgvector-test psql -U postgres -c "SELECT count(*) FROM vector_store;"
+curl -X POST http://localhost:8081/api/query -H "Content-Type: application/json" -d '{"question": "What is retrieval augmented generation?"}'
 ```
-**Expected:** count matches your chunk count (2).
+**Expected:** psql count = 2; grounded answer with sources.
 
-### 2.7 Test — query
+### 2.5 Restart persistence test (the payoff)
+
+Stop, restart, query again without re-ingesting.
+
+**Expected: STILL WORKS** — same grounded answer, same source.
+
+### 2.6 Multimodal regression check
 
 ```bash
-curl -X POST http://localhost:8081/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is retrieval augmented generation?"}'
+curl -X POST http://localhost:8081/api/documents/multimodal-image -F "file=@ocr-test.png"
 ```
-**Expected:** grounded answer with `"sources":["test.txt"]`
-
-### 2.8 Test — restart persistence (the big differentiator)
-
-Stop the Spring Boot app, restart it, **without re-uploading test.txt**, run the query curl again.
-
-**Expected result: STILL WORKS** — same grounded answer, same source. This is the payoff moment of the whole demo.
-
-### 2.9 Test — multimodal regression check
-
-```bash
-curl -X POST http://localhost:8081/api/documents/multimodal-image \
-  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/ocr-test.png"
-```
-**Expected:** `{"strategy":"multimodal-embedding","status":"stored",...}` — confirms the separate `multimodalVectorStore` bean is unaffected.
 
 ---
 
-## PART 3 — JVector (embedded, no infra, custom-built)
+## PART 3 — JVector (embedded, no infra, custom-built, no persistence)
 
-### 3.1 Stop Postgres (to genuinely prove "zero external infra")
+### 3.1 Stop Postgres
 
 ```bash
 docker stop pgvector-test
 ```
-This step matters — leaving Postgres running would hide the fact that JVector doesn't need it.
 
 ### 3.2 Config: application.properties
 
-Comment OUT the Postgres datasource block again:
-```properties
-# spring.datasource.url=jdbc:postgresql://localhost:5432/postgres
-# spring.datasource.username=postgres
-# spring.datasource.password=postgres
-```
-
-Add the exclude line (prevents PGvector AND the JDBC/DataSource auto-configuration from trying to connect):
+Comment out the Postgres datasource block. Add:
 ```properties
 spring.autoconfigure.exclude=org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration,org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.data.jdbc.autoconfigure.DataJdbcRepositoriesAutoConfiguration
 ```
-
-(Optional, for full JVector SIMD performance — add as a VM option in IntelliJ's run config: `--add-modules jdk.incubator.vector`)
+(Optional VM option for full SIMD performance: `--add-modules jdk.incubator.vector`)
 
 ### 3.3 Config: AiConfig.java
 
-Comment out the SimpleVectorStore bean and the PGvector bean. Uncomment/keep active the JVector bean:
+Comment out all other beans, activate JVector's:
 ```java
 @Bean
 public VectorStore vectorStore(
@@ -321,77 +313,70 @@ public VectorStore vectorStore(
 }
 ```
 
-### 3.4 Run the app
+### 3.4 Run and test
 
-Start `RagApplication` in IntelliJ. **Confirm it starts successfully with Postgres fully stopped** — this itself is the "zero external infra" proof.
-
-### 3.5 Test — ingest
-
+Confirm the app starts with Postgres **fully stopped** — proves zero external infra.
 ```bash
-curl -X POST http://localhost:8081/api/documents \
-  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/test.txt"
+curl -X POST http://localhost:8081/api/documents -F "file=@test.txt"
+curl -X POST http://localhost:8081/api/query -H "Content-Type: application/json" -d '{"question": "What is retrieval augmented generation?"}'
 ```
-**Expected:** same shape response, `chunksStored: 2`.
 
-### 3.6 Test — query
+### 3.5 Restart persistence test (expected to fail — this is the finding)
 
-```bash
-curl -X POST http://localhost:8081/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is retrieval augmented generation?"}'
-```
-**Expected:** grounded answer with `"sources":["test.txt"]`
+Stop, restart, query again without re-ingesting.
 
-### 3.7 Test — restart persistence (expected to fail — this is the finding)
+**Expected: EMPTY.** JVector is embedded/in-memory only in this PoC — data lives inside the JVM process and disappears when it ends.
 
-Stop the app, restart it, **without re-uploading test.txt**, run the query curl again.
+### 3.6 Multimodal regression check
 
-**Expected result: EMPTY** — `"answer":"I don't have any relevant documents..."`, `"sources":[]`
-
-**Key talking point:** JVector is an embedded, in-memory library — data lives inside the JVM process, not in a separate database. When the process ends, the data goes with it. (JVector does support on-disk persistence via `OnDiskGraphIndex`, not implemented in this PoC — flagged as a follow-up item, not a limitation of the library itself.)
-
-### 3.8 Test — multimodal regression check
-
-```bash
-curl -X POST http://localhost:8081/api/documents/multimodal-image \
-  -F "file=@/Users/fwd/Documents/Petclinic-RAG-POC/ocr-test.png"
-```
-**Expected:** same success response — confirms JVector swap didn't break the untouched multimodal path.
+Same as Part 2.6.
 
 ---
 
-## PART 4 — Query latency comparison (optional, nice bonus stat)
+## PART 4 — ObjectBox (embedded, no infra, custom-built, genuine persistence)
 
-Run this same command against each store while it's active, right after ingesting test.txt:
+### 4.1 Docker — not needed
 
-```bash
-curl -w "\n%{time_total}\n" -X POST http://localhost:8081/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is retrieval augmented generation?"}'
+Same as JVector — Postgres stays stopped.
+
+### 4.2 Config: application.properties
+
+Same state as JVector (Postgres commented out, same `spring.autoconfigure.exclude` line active). ObjectBox needs no additional exclude entries of its own.
+
+### 4.3 Config: AiConfig.java
+
+Comment out JVector's bean, activate ObjectBox's:
+```java
+@Bean
+public VectorStore vectorStore(
+        @Qualifier("embeddingModel") EmbeddingModel embeddingModel,
+        @Value("${objectbox.db-directory:objectbox-data}") String dbDirectory) {
+    return new com.petclinic.rag.service.vectorstore.ObjectBoxVectorStore(embeddingModel, dbDirectory);
+}
 ```
 
-The number after the JSON response is total request time in seconds. Record it for each store.
+### 4.4 Run and test
 
----
+```bash
+curl -X POST http://localhost:8081/api/documents -F "file=@test.txt"
+curl -X POST http://localhost:8081/api/query -H "Content-Type: application/json" -d '{"question": "What is retrieval augmented generation?"}'
+ls -la objectbox-data/
+```
+**Expected:** grounded answer; real `data.mdb`/`lock.mdb` LMDB files present on disk.
 
-## Comparison Table (fill in during/after demo)
+### 4.5 Restart persistence test (the payoff for ObjectBox)
 
-| Criterion | SimpleVectorStore | PGvector | JVector |
-|---|---|---|---|
-| Spring AI official support | Yes (built-in) | Yes (starter) | None — custom |
-| External infra required | None | Postgres (Docker) | None |
-| Setup time | Instant | ~15 min (docker + deps + properties) | ~1 hr (custom class + debugging) |
-| Lines of custom code | 0 | 0 | ~180 |
-| Persistence across restarts | No | **Yes** | No (not implemented) |
-| Query latency | ___ sec | ___ sec | ___ sec |
-| Documentation quality | Excellent (official) | Excellent (official) | Pre-GA, docs lag actual API |
-| Production-ready | No (Spring AI's own docs say so) | Yes | No (this PoC's implementation) |
+Stop, restart, query again without re-ingesting.
+
+**Expected: STILL WORKS** — same "zero external infra" profile as JVector, but genuinely persists, unlike JVector.
+
+### 4.6 Multimodal regression check
+
+Same as Part 2.6.
 
 ---
 
 ## Appendix A — Docker command to (re)create the PGvector container from scratch
-
-Only needed if `pgvector-test` doesn't exist yet (e.g. fresh machine):
 
 ```bash
 docker run -d --name pgvector-test \
@@ -404,7 +389,18 @@ docker run -d --name pgvector-test \
 
 ## Appendix B — Quick reference: which bean is active
 
-Only ever have **one** of these three uncommented in `AiConfig.java` at a time:
-1. `SimpleVectorStore.builder(...)` bean
-2. No bean at all (PGvector auto-config takes over) — remove the `spring.autoconfigure.exclude` line
-3. `new JVectorStore(...)` bean — add the `spring.autoconfigure.exclude` line, stop Postgres
+Only ever have **one** `vectorStore` bean uncommented in `AiConfig.java` at a time, kept in sync with `application.properties`'s `spring.autoconfigure.exclude` line (see Key Learning #12 — these two must be toggled together, not independently):
+
+| Store | AiConfig.java | `spring.autoconfigure.exclude` | Postgres |
+|---|---|---|---|
+| SimpleVectorStore | SimpleVectorStore bean active | not needed | not needed |
+| PGvector | **no bean defined** | removed/commented | running |
+| JVector | JVectorStore bean active | present | stopped |
+| ObjectBox | ObjectBoxVectorStore bean active | present (same line as JVector) | stopped |
+
+## Appendix C — ObjectBox one-time Maven setup notes
+
+Required once per fresh machine, not per-run:
+1. `mkdir -p objectbox-models` in the project root — commit this folder to git (schema tracking); `objectbox-data/` should be gitignored instead (actual binary DB files)
+2. Confirm `pom.xml` has the ObjectBox annotation processor merged into the **same** `maven-compiler-plugin` execution as Lombok's — two separate plugin blocks with matching coordinates will collide (Key Learning #13)
+3. Add the correct platform-specific native dependency for the target OS (`objectbox-macos`, `objectbox-linux`, or `objectbox-windows`) — this project currently only has macOS
