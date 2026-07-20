@@ -3,19 +3,42 @@
   <component name="CompilerConfiguration">
     <annotationProcessing>
       <profile name="Annotation profile for rag" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
+        <sourceOutputDir name="../generated-sources/annotations" />
+        <sourceTestOutputDir name="../generated-test-sources/test-annotations" />
+        <option name="objectbox.modelPath" value="$PROJECT_DIR$/objectbox-models/default.json" />
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
+          <entry name="$MAVEN_REPOSITORY$/io/objectbox/objectbox-processor/5.4.2/objectbox-processor-5.4.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/jetbrains/kotlin/kotlin-stdlib/2.0.21/kotlin-stdlib-2.0.21.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/jetbrains/annotations/13.0/annotations-13.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/io/objectbox/objectbox-code-modifier/5.4.2/objectbox-code-modifier-5.4.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/greenrobot/essentials/3.1.0/essentials-3.1.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/javassist/javassist/3.30.2-GA/javassist-3.30.2-GA.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/squareup/moshi/moshi/1.15.0/moshi-1.15.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/jetbrains/kotlin/kotlin-stdlib-jdk8/1.8.21/kotlin-stdlib-jdk8-1.8.21.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/jetbrains/kotlin/kotlin-stdlib-jdk7/1.8.21/kotlin-stdlib-jdk7-1.8.21.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/squareup/okio/okio/2.10.0/okio-2.10.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/jetbrains/kotlin/kotlin-stdlib-common/1.4.20/kotlin-stdlib-common-1.4.20.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/google/crypto/tink/tink/1.15.0/tink-1.15.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/google/code/gson/gson/2.10.1/gson-2.10.1.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/google/errorprone/error_prone_annotations/2.22.0/error_prone_annotations-2.22.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/google/protobuf/protobuf-java/3.25.3/protobuf-java-3.25.3.jar" />
+          <entry name="$MAVEN_REPOSITORY$/io/objectbox/objectbox-generator/5.4.2/objectbox-generator-5.4.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/freemarker/freemarker/2.3.34/freemarker-2.3.34.jar" />
+          <entry name="$MAVEN_REPOSITORY$/io/objectbox/objectbox-java-api/5.4.2/objectbox-java-api-5.4.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/io/objectbox/objectbox-java/5.4.2/objectbox-java-5.4.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" />
         </processorPath>
-        <module name="rag" />
+        <module name="rag.test" />
+        <module name="rag.main" />
       </profile>
     </annotationProcessing>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="rag" options="-parameters" />
+      <module name="rag" options="-parameters -Aobjectbox.modelPath=$PROJECT_DIR$/objectbox-models/default.json" />
+      <module name="rag.main" options="-parameters -Aobjectbox.modelPath=$PROJECT_DIR$/objectbox-models/default.json" />
+      <module name="rag.test" options="-parameters" />
     </option>
   </component>
 </project>
