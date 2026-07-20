@@ -25,4 +25,3 @@ com/petclinic/rag/config/NvidiaEmbeddingModel$NvidiaEmbeddingApiResponse.class
 com/petclinic/rag/service/vectorstore/VectorDocumentEntity_.class
 com/petclinic/rag/service/vectorstore/VectorDocumentEntity_$VectorDocumentEntityIdGetter.class
 com/petclinic/rag/service/extraction/TextExtractor.class
-com/petclinic/rag/controller/HealthController.class

@@ -1,0 +1,4 @@
+com/petclinic/rag/controller/QueryControllerTest.class
+com/petclinic/rag/service/RagQueryServiceTest.class
+com/petclinic/rag/service/ExtractionTest.class
+com/petclinic/rag/RagApplicationTests.class
