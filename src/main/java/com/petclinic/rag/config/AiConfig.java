@@ -81,31 +81,24 @@ public class AiConfig {
     }
     */
 
-    // PGvector — currently ACTIVE (final recommendation from Task 1). No explicit
-    // vectorStore bean is defined here on purpose: Spring AI's
-    // spring-ai-starter-vector-store-pgvector auto-configuration creates the real
-    // PgVectorStore bean automatically, as long as no spring.autoconfigure.exclude
-    // entry is blocking it (see application.properties) and Postgres is running.
-
-    // Chat memory — backed by Postgres via the auto-configured JdbcChatMemoryRepository
-    // (available once spring-ai-starter-model-chat-memory-repository-jdbc is on the
-    // classpath and a DataSource exists). MessageWindowChatMemory caps how many
-    // messages are kept per conversation; older ones are evicted once the window
-    // is exceeded — this is truncation only, NOT summarization (see the custom
-    // compression step planned as a follow-up).
     @Bean
-    public org.springframework.ai.chat.memory.ChatMemory chatMemory(
-            org.springframework.ai.chat.memory.ChatMemoryRepository chatMemoryRepository) {
-        return org.springframework.ai.chat.memory.MessageWindowChatMemory.builder()
-                .chatMemoryRepository(chatMemoryRepository)
-                .maxMessages(20)
+    public org.springframework.ai.chat.client.ChatClient summarizerChatClient(
+            org.springframework.ai.chat.model.ChatModel chatModel) {
+        return org.springframework.ai.chat.client.ChatClient.builder(chatModel)
+                .defaultOptions(ChatOptions.builder()
+                        .temperature(0.3)
+                        .build().mutate())
                 .build();
     }
 
-    // ChatClient — the fluent API RagQueryService now uses instead of raw ChatModel.call().
-    // MessageChatMemoryAdvisor here is what makes "the whole context window passed on
-    // every request" happen automatically, per the team lead's instruction — it retrieves
-    // stored history for the given conversationId and injects it before each call.
+    @Bean
+    public org.springframework.ai.chat.memory.ChatMemory chatMemory(
+            org.springframework.ai.chat.memory.ChatMemoryRepository chatMemoryRepository,
+            @org.springframework.beans.factory.annotation.Qualifier("summarizerChatClient")
+            org.springframework.ai.chat.client.ChatClient summarizerChatClient) {
+        return new com.petclinic.rag.service.CompressingChatMemory(chatMemoryRepository, summarizerChatClient);
+    }
+
     @Bean
     public org.springframework.ai.chat.client.ChatClient chatClient(
             org.springframework.ai.chat.model.ChatModel chatModel,
@@ -116,14 +109,6 @@ public class AiConfig {
                 .build();
     }
 
-    // Separate ChatClient, deliberately WITHOUT the memory advisor — used only
-    // by QueryRouter for intent classification. Keeping this decoupled from
-    // chatMemory prevents classification exchanges ("hi there" -> "CHAT") from
-    // being written into conversation history, where they would otherwise get
-    // replayed back to the model on later turns and corrupt real answers with
-    // one-word classification-style output. Found via real testing, not
-    // theoretical — the shared-client version produced "RETRIEVE" as an actual
-    // answer instead of a generated response.
     @Bean
     public org.springframework.ai.chat.client.ChatClient classifierChatClient(
             org.springframework.ai.chat.model.ChatModel chatModel) {

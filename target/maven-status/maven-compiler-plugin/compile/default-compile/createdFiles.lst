@@ -9,6 +9,7 @@ com/petclinic/rag/controller/QueryController.class
 com/petclinic/rag/service/MultimodalImageService.class
 com/petclinic/rag/config/NvidiaEmbeddingModel.class
 com/petclinic/rag/service/extraction/TxtExtractor.class
+com/petclinic/rag/service/CompressingChatMemory.class
 com/petclinic/rag/config/AiConfig.class
 com/petclinic/rag/RagApplication.class
 com/petclinic/rag/dto/QueryResponse.class
