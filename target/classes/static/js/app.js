@@ -18,11 +18,8 @@ const historyContainer = document.getElementById('historyContainer');
 const emptyHistory = document.getElementById('emptyHistory');
 
 let selectedFile = null;
+const conversationId = crypto.randomUUID();
 
-
-/* =========================================================
-   Helpers
-   ========================================================= */
 function isImage(filename) {
     const lower = filename.toLowerCase();
     return lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg');
@@ -41,10 +38,6 @@ function evidenceCardHtml(sourceName, rank) {
   `;
 }
 
-
-/* =========================================================
-   Upload panel
-   ========================================================= */
 function setSelectedFile(file) {
     selectedFile = file;
     dropzone.querySelector('.main').textContent = file.name;
@@ -68,7 +61,6 @@ function addFileChip(name, strategy) {
     fileList.prepend(chip);
 }
 
-// Click-to-browse
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') fileInput.click();
@@ -77,7 +69,6 @@ fileInput.addEventListener('change', () => {
     if (fileInput.files.length) setSelectedFile(fileInput.files[0]);
 });
 
-// Drag and drop
 ['dragover', 'dragenter'].forEach(evt =>
     dropzone.addEventListener(evt, (e) => {
         e.preventDefault();
@@ -94,7 +85,6 @@ dropzone.addEventListener('drop', (e) => {
     if (e.dataTransfer.files.length) setSelectedFile(e.dataTransfer.files[0]);
 });
 
-// Upload submission
 uploadBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
 
@@ -124,10 +114,6 @@ uploadBtn.addEventListener('click', async () => {
     }
 });
 
-
-/* =========================================================
-   Ask panel
-   ========================================================= */
 askBtn.addEventListener('click', async () => {
     const question = questionInput.value.trim();
     if (!question) return;
@@ -141,7 +127,7 @@ askBtn.addEventListener('click', async () => {
         const res = await fetch('/api/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
+            body: JSON.stringify({ question, conversationId })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Something went wrong answering that.');
@@ -157,7 +143,6 @@ askBtn.addEventListener('click', async () => {
     }
 });
 
-// Cmd/Ctrl + Enter submits from the textarea
 questionInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) askBtn.click();
 });
@@ -169,10 +154,6 @@ function renderAnswer(answer, sources) {
     answerBlock.classList.add('show');
 }
 
-
-/* =========================================================
-   History log
-   ========================================================= */
 function addHistoryEntry(question, answer, sources) {
     emptyHistory.style.display = 'none';
 
