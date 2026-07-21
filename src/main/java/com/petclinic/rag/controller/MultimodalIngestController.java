@@ -1,5 +1,6 @@
 package com.petclinic.rag.controller;
 
+import com.petclinic.rag.service.FileDeduplicationService;
 import com.petclinic.rag.service.MultimodalImageService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,18 +11,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
-/**
- * Separate endpoint from /api/documents, deliberately — this uses the
- * multimodal (image-native) embedding strategy instead of OCR, so both
- * can be tested independently on the same image for Task 1's comparison.
- */
 @RestController
 public class MultimodalIngestController {
 
-    private final MultimodalImageService multimodalImageService;
+    private static final String INGESTION_TYPE = "multimodal-image";
 
-    public MultimodalIngestController(MultimodalImageService multimodalImageService) {
+    private final MultimodalImageService multimodalImageService;
+    private final FileDeduplicationService deduplicationService;
+
+    public MultimodalIngestController(MultimodalImageService multimodalImageService,
+                                      FileDeduplicationService deduplicationService) {
         this.multimodalImageService = multimodalImageService;
+        this.deduplicationService = deduplicationService;
     }
 
     @PostMapping("/api/documents/multimodal-image")
@@ -40,7 +41,21 @@ public class MultimodalIngestController {
         }
 
         try {
+            byte[] fileBytes = file.getBytes();
+            String fileHash = deduplicationService.computeHash(fileBytes);
+
+            if (deduplicationService.isAlreadyIngested(fileHash, INGESTION_TYPE)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of(
+                                "filename", filename,
+                                "status", "skipped",
+                                "reason", "This exact image has already been ingested via multimodal embedding."
+                        ));
+            }
+
             multimodalImageService.embedAndStore(file);
+            deduplicationService.markIngested(fileHash, filename, INGESTION_TYPE);
+
             return ResponseEntity.ok(Map.of(
                     "filename", filename,
                     "strategy", "multimodal-embedding",
