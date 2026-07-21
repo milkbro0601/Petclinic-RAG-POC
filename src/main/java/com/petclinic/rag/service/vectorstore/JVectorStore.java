@@ -29,34 +29,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-/**
- * Custom VectorStore implementation backed by JVector (embedded, in-memory graph index).
- *
- * Lives in service/vectorstore/ alongside the (upcoming) ObjectBoxVectorStore, following
- * the same Strategy-pattern convention already established in service/extraction/
- * (TxtExtractor, DocxExtractor, ImageOcrExtractor picked via ExtractorFactory). Here,
- * bean selection happens in AiConfig instead of a dedicated factory class, since only
- * one VectorStore bean can be active in the Spring context at a time.
- *
- * IMPORTANT DESIGN NOTE (Task 1 comparison finding):
- * JVector's GraphIndexBuilder is a BATCH builder — it constructs a graph from a fixed
- * RandomAccessVectorValues snapshot. It is not a live "insert one row" API like PGvector's
- * INSERT. For this PoC, add() takes the naive approach of appending to an in-memory list
- * and REBUILDING the entire graph index on every call. This is fine for demo-scale document
- * counts, but is a real architectural cost vs. PGvector — worth calling out explicitly in
- * the Task 1 evaluation table as "lines of custom code" AND "write-path complexity".
- *
- * PERSISTENCE NOTE:
- * This class does NOT yet use JVector's native OnDiskGraphIndex format. It only holds
- * documents + vectors in memory — restart-persistence is not implemented here. If your
- * comparison table needs a persistence entry for JVector, that requires a follow-up
- * (either wiring OnDiskGraphIndex, or a cruder custom save/load of the raw vectors to disk
- * and rebuilding the graph on startup).
- *
- * Verify class/method names against your actual jvector 4.0.0-rc.8-hf1 javadocs before
- * compiling — this is a pre-GA (release candidate) library and API details can differ
- * from what's shown in the public tutorials.
- */
 public class JVectorStore implements VectorStore {
 
     private final EmbeddingModel embeddingModel;
@@ -64,8 +36,6 @@ public class JVectorStore implements VectorStore {
     private final VectorSimilarityFunction similarityFunction;
     private final VectorTypeSupport vts;
 
-    // Guards rebuild-on-write; GraphSearcher instances are not thread-safe, so each
-    // search call creates its own searcher against the current immutable graph reference.
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     private final List<Document> documents = new ArrayList<>();
@@ -77,8 +47,6 @@ public class JVectorStore implements VectorStore {
     public JVectorStore(EmbeddingModel embeddingModel, int dimension) {
         this.embeddingModel = embeddingModel;
         this.dimension = dimension;
-        // COSINE chosen to match the distance-type=COSINE_DISTANCE used in your
-        // PGvector setup, so the two are comparable apples-to-apples.
         this.similarityFunction = VectorSimilarityFunction.COSINE;
         this.vts = VectorizationProvider.getInstance().getVectorTypeSupport();
     }
@@ -116,9 +84,6 @@ public class JVectorStore implements VectorStore {
 
     @Override
     public void delete(Filter.Expression filterExpression) {
-        // Not implemented for this PoC — PGvector/SimpleVectorStore support metadata
-        // filter expressions natively; JVector has no built-in metadata filter concept,
-        // so this would need a manual pre-filter pass before search. Flag as a known gap.
         throw new UnsupportedOperationException(
                 "Filter-expression delete not implemented for JVectorStore PoC");
     }
@@ -140,11 +105,6 @@ public class JVectorStore implements VectorStore {
             try (GraphSearcher searcher = new GraphSearcher(graph)) {
                 SearchResult result = searcher.search(ssp, request.getTopK(), Bits.ALL);
 
-                // getNodes() returns a plain NodeScore[] array, not a List — use
-                // Arrays.stream(), not .stream() directly on the array.
-                //
-                // getSimilarityThreshold() returns a primitive double (default 0.0,
-                // meaning "accept everything"), not a nullable Double — no null check needed.
                 return Arrays.stream(result.getNodes())
                         .filter(ns -> ns.score >= request.getSimilarityThreshold())
                         .map(ns -> documents.get(ns.node))
@@ -157,11 +117,6 @@ public class JVectorStore implements VectorStore {
         }
     }
 
-    /**
-     * Rebuilds the entire graph index from the current in-memory vector list.
-     * Called on every add()/delete() — see class-level note on why this is a
-     * PoC-level shortcut rather than a production incremental-write pattern.
-     */
     private void rebuildGraph() {
         if (vectors.isEmpty()) {
             graph = null;
@@ -175,8 +130,6 @@ public class JVectorStore implements VectorStore {
         BuildScoreProvider bsp =
                 BuildScoreProvider.randomAccessScoreProvider(newRavv, similarityFunction);
 
-        // Reasonable defaults per JVector's own tutorial — tune if recall/latency
-        // numbers in your comparison table look off.
         int M = 32;
         int beamWidth = 100;
         float neighborOverflow = 1.2f;

@@ -9,16 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Rewrites follow-up questions ("what about pricing?") into standalone,
- * self-contained queries using prior conversation history, so retrieval
- * doesn't have to rely on the LLM's memory to understand what "pricing"
- * refers to — the vector store only ever sees the literal query text.
- *
- * Only used for the SEARCH step. The user's original question is still
- * what's stored in ChatMemory and shown back to the LLM for answering —
- * rewriting only changes what gets embedded and searched.
- */
 @Component
 public class QueryRewriter {
 

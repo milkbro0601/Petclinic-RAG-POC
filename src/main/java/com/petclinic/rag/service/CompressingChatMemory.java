@@ -43,17 +43,9 @@ public class CompressingChatMemory implements ChatMemory {
 
         int totalTokens = estimateTokens(allMessages);
 
-        // TEMP DEBUG — remove after testing:
-        System.out.println("[CompressingChatMemory] conversation=" + conversationId
-                + " messageCount=" + allMessages.size() + " estimatedTokens=" + totalTokens);
-
-
         if (totalTokens <= TOKEN_THRESHOLD || allMessages.size() <= KEEP_RECENT_MESSAGES) {
             return allMessages;
         }
-
-        System.out.println("[CompressingChatMemory] COMPRESSION TRIGGERED — summarizing "
-                + (allMessages.size() - KEEP_RECENT_MESSAGES) + " older messages");
 
         int splitIndex = allMessages.size() - KEEP_RECENT_MESSAGES;
         List<Message> older = allMessages.subList(0, splitIndex);
