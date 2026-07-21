@@ -4,6 +4,7 @@ com/petclinic/rag/service/vectorstore/VectorDocumentEntityCursor.class
 com/petclinic/rag/service/vectorstore/ObjectBoxVectorStore.class
 com/petclinic/rag/service/extraction/ImageOcrExtractor.class
 com/petclinic/rag/service/extraction/DocxExtractor$1.class
+com/petclinic/rag/service/FileDeduplicationService.class
 com/petclinic/rag/service/QueryTimeVectorSearch.class
 com/petclinic/rag/controller/QueryController.class
 com/petclinic/rag/service/MultimodalImageService.class
