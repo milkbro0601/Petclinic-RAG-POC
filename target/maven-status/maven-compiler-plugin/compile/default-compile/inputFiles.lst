@@ -7,6 +7,7 @@
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/dto/QueryRequest.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/dto/QueryResponse.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/ChunkingService.java
+/Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/CompressingChatMemory.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/MultimodalImageService.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/QueryRouter.java
 /Users/fwd/Documents/Petclinic-RAG-POC/src/main/java/com/petclinic/rag/service/QueryTimeVectorSearch.java
