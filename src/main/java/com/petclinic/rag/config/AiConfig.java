@@ -100,6 +100,15 @@ public class AiConfig {
     }
 
     @Bean
+    public org.springframework.ai.chat.client.ChatClient.Builder rewriteChatClientBuilder(
+            org.springframework.ai.chat.model.ChatModel chatModel) {
+        return org.springframework.ai.chat.client.ChatClient.builder(chatModel)
+                .defaultOptions(ChatOptions.builder()
+                        .temperature(0.0)
+                        .build().mutate());
+    }
+
+    @Bean
     public org.springframework.ai.chat.client.ChatClient chatClient(
             org.springframework.ai.chat.model.ChatModel chatModel,
             org.springframework.ai.chat.memory.ChatMemory chatMemory) {
