@@ -60,19 +60,17 @@ public class RagQueryService {
                 .map(Document::getText)
                 .collect(Collectors.joining("\n\n---\n\n"));
 
-        String prompt = """
-                Answer the question using ONLY the context below.
-                If the context doesn't contain enough information to answer, say so honestly
-                instead of making something up.
-
-                Context:
-                %s
-
-                Question: %s
-                """.formatted(context, question);
-
         String answer = chatClient.prompt()
-                .user(prompt)
+                .system(s -> s.text("""
+                        Answer the question using ONLY the context below.
+                        If the context doesn't contain enough information to answer, say so honestly
+                        instead of making something up.
+                        
+                        Context:
+                        {context}
+                        """)
+                        .param("context", context))
+                .user(question)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
