@@ -14,11 +14,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Plain unit tests for the extractors — no Spring context, no HTTP,
- * no file upload required. This is the fastest way to confirm the
- * extraction logic itself works before wiring it into a controller.
- */
 class ExtractionTest {
 
     @Test
