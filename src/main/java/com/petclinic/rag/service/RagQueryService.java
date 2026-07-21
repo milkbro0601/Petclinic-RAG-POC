@@ -18,21 +18,25 @@ public class RagQueryService {
     private final QueryTimeVectorSearch queryTimeVectorSearch;
     private final ChatClient chatClient;
     private final QueryRouter queryRouter;
+    private final QueryRewriter queryRewriter;
 
-    public RagQueryService(QueryTimeVectorSearch queryTimeVectorSearch, ChatClient chatClient, QueryRouter queryRouter) {
+    public RagQueryService(QueryTimeVectorSearch queryTimeVectorSearch, ChatClient chatClient, QueryRouter queryRouter, QueryRewriter queryRewriter) {
         this.queryTimeVectorSearch = queryTimeVectorSearch;
         this.chatClient = chatClient;
         this.queryRouter = queryRouter;
+        this.queryRewriter = queryRewriter;
     }
 
     public QueryResponse answer(String question, String conversationId) {
-        List<Document> relevantChunks = queryTimeVectorSearch.similaritySearch(question, TOP_K, RELEVANCE_THRESHOLD);
+        String searchQuery = queryRewriter.rewrite(question, conversationId);
+
+        List<Document> relevantChunks = queryTimeVectorSearch.similaritySearch(searchQuery, TOP_K, RELEVANCE_THRESHOLD);
 
         if (!relevantChunks.isEmpty()) {
             return answerFromDocuments(question, conversationId, relevantChunks);
         }
 
-        QueryRouter.Intent intent = queryRouter.classify(question);
+        QueryRouter.Intent intent = queryRouter.classify(question); // classify original question, not rewritten
         if (intent == QueryRouter.Intent.RETRIEVE) {
             return new QueryResponse(
                     "I don't have any relevant documents to answer that question. Try uploading some first.",
