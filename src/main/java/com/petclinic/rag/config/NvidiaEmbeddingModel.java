@@ -11,23 +11,19 @@ import org.springframework.web.client.RestClient;
 import java.util.List;
 import java.util.Map;
 
-/**
- * NVIDIA NIM's llama-nemotron-embed model is "asymmetric" and requires a
- * non-standard "input_type" field ("query" or "passage") that Spring AI's
- * typed OpenAiEmbeddingOptions has no way to send. This bean calls NVIDIA
- * directly instead, so we can include that field.
- *
- * For now this always sends input_type="passage", which is correct for
- * storing documents. A future improvement would use "query" specifically
- * when embedding the user's search question at retrieval time.
- */
 public class NvidiaEmbeddingModel implements EmbeddingModel {
 
     private final RestClient restClient;
     private final String model;
+    private final String inputType;
 
     public NvidiaEmbeddingModel(String baseUrl, String apiKey, String model) {
+        this(baseUrl, apiKey, model, "passage");
+    }
+
+    public NvidiaEmbeddingModel(String baseUrl, String apiKey, String model, String inputType) {
         this.model = model;
+        this.inputType = inputType;
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
@@ -42,7 +38,7 @@ public class NvidiaEmbeddingModel implements EmbeddingModel {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "input", inputs,
-                "input_type", "passage",
+                "input_type", inputType,
                 "encoding_format", "float"
         );
 
@@ -66,6 +62,5 @@ public class NvidiaEmbeddingModel implements EmbeddingModel {
     }
 
     record NvidiaEmbeddingApiResponse(List<NvidiaEmbeddingData> data) {}
-
     record NvidiaEmbeddingData(float[] embedding, int index) {}
 }

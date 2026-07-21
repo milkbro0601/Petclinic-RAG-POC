@@ -18,6 +18,6 @@ public class QueryController {
 
     @PostMapping("/api/query")
     public QueryResponse query(@RequestBody QueryRequest request) {
-        return ragQueryService.answer(request.question());
+        return ragQueryService.answer(request.question(), request.conversationId());
     }
 }
