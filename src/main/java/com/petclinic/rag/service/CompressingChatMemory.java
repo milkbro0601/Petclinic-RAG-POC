@@ -16,8 +16,8 @@ import java.util.stream.Collectors;
 
 public class CompressingChatMemory implements ChatMemory {
 
-    private static final int TOKEN_THRESHOLD = 50;
-    private static final int KEEP_RECENT_MESSAGES = 2;
+    private static final int TOKEN_THRESHOLD = 3000;
+    private static final int KEEP_RECENT_MESSAGES = 6;
 
     private final ChatMemoryRepository repository;
     private final ChatClient summarizerChatClient;
@@ -40,7 +40,6 @@ public class CompressingChatMemory implements ChatMemory {
     @Override
     public List<Message> get(String conversationId) {
         List<Message> allMessages = repository.findByConversationId(conversationId);
-
         int totalTokens = estimateTokens(allMessages);
 
         if (totalTokens <= TOKEN_THRESHOLD || allMessages.size() <= KEEP_RECENT_MESSAGES) {
@@ -78,6 +77,14 @@ public class CompressingChatMemory implements ChatMemory {
 
         String prompt = """
                 Summarize the following conversation history concisely, in 3-5 sentences.
+
+                Write the summary from the perspective of describing facts ABOUT THE
+                USER you (the assistant) are talking to. Use phrasing like "The user's
+                name is ___" or "The user mentioned ___" — do NOT write it as a
+                third-person story about someone else, since it will be read by you,
+                the same assistant, as context about the person currently chatting
+                with you.
+
                 Preserve any specific facts, preferences, names, or decisions the user
                 mentioned — these matter more than conversational pleasantries.
 
