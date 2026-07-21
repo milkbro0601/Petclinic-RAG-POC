@@ -18,7 +18,8 @@ const historyContainer = document.getElementById('historyContainer');
 const emptyHistory = document.getElementById('emptyHistory');
 
 let selectedFile = null;
-const conversationId = crypto.randomUUID();
+const conversationId = sessionStorage.getItem('conversationId') || crypto.randomUUID();
+sessionStorage.setItem('conversationId', conversationId);
 
 function isImage(filename) {
     const lower = filename.toLowerCase();
