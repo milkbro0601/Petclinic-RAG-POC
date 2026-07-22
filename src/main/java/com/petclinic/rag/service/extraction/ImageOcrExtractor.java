@@ -40,6 +40,6 @@ public class ImageOcrExtractor implements TextExtractor {
     public boolean supports(String filename) {
         if (filename == null) return false;
         String lower = filename.toLowerCase();
-        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".tiff");
     }
 }

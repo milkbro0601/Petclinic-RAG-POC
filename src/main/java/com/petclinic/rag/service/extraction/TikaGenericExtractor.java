@@ -7,10 +7,16 @@ import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
-public class DocxExtractor implements TextExtractor {
+public class TikaGenericExtractor implements TextExtractor {
+
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            ".doc", ".docx", ".pdf", ".txt", ".csv", ".json", ".md",
+            ".xls", ".xlsx", ".ppt", ".pptx"
+    );
 
     @Override
     public String extract(InputStream inputStream, String filename) {
@@ -31,6 +37,8 @@ public class DocxExtractor implements TextExtractor {
 
     @Override
     public boolean supports(String filename) {
-        return filename != null && filename.toLowerCase().endsWith(".docx");
+        if (filename == null) return false;
+        String lower = filename.toLowerCase();
+        return SUPPORTED_EXTENSIONS.stream().anyMatch(lower::endsWith);
     }
 }
