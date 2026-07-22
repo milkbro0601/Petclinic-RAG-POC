@@ -26,7 +26,7 @@ public class AiConfig {
             @Value("${spring.ai.openai.base-url}") String baseUrl,
             @Value("${spring.ai.openai.api-key}") String apiKey,
             @Value("${nvidia.multimodal-embedding-model}") String model) {
-        return new NvidiaEmbeddingModel(baseUrl, apiKey, model);
+        return new NvidiaEmbeddingModel(baseUrl, apiKey, model, "passage", java.util.List.of("image"));
     }
 
     @Bean
