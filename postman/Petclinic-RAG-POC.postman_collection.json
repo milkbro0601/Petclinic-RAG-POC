@@ -1,0 +1,183 @@
+{
+  "info": {
+    "_postman_id": "271fb3bd-ca0d-401b-9f67-15199c90fa78",
+    "name": "Petclinic-RAG-POC",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56329101",
+    "_collection_link": "https://go.postman.co/collection/56329101-271fb3bd-ca0d-401b-9f67-15199c90fa78?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Ingest PDF",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "uuid": "54952fbc-dbee-4b07-9a91-ddc9c43c835e",
+              "src": "/Users/fwd/Documents/sample.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/documents",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "documents"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "multimodal image",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "uuid": "fae84aac-def0-4c52-9c6c-87440b8f35b6",
+              "src": "/Users/fwd/Documents/Petclinic-RAG-POC/src/main/resources/sample-files/ocr-test.png"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/documents/multimodal-image",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "multimodal-image"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Query Request",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"question\": \"What does the marker string say in the PDF sample?\",\n  \"conversationId\": \"{{conversation_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/query",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "query"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Query Recall",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"question\": \"What fact did I just ask you to remember?\",\n  \"conversationId\": \"{{conversation_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/query",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "query"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          "pm.test(\"Status is 200\", function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test(\"Answer is present\", function () {",
+          "    const json = pm.response.json();",
+          "    pm.expect(json.answer).to.be.a('string').and.not.empty;",
+          "});",
+          "",
+          "pm.test(\"Sources returned (grounded in a document)\", function () {",
+          "    const json = pm.response.json();",
+          "    pm.expect(json.sources).to.be.an('array').that.is.not.empty;",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": ""
+    },
+    {
+      "key": "conversation_id",
+      "value": ""
+    }
+  ]
+}
