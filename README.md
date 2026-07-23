@@ -18,9 +18,11 @@ Built as a learning project and team task, covering two objectives:
 | Text embedding model | `nvidia/llama-nemotron-embed-1b-v2` | Handles asymmetric query/passage embeddings |
 | Multimodal (image) embedding model | `nvidia/llama-nemotron-embed-vl-1b-v2` | Embeds images directly, no OCR needed |
 | **Vector store (final choice)** | **PGvector** (`spring-ai-starter-vector-store-pgvector`) | Official Spring AI support, genuine restart persistence, zero custom code. See [Task 1: Vector Store Comparison](#task-1-vector-store-comparison) for the full evaluation against JVector, ObjectBox, and the original `SimpleVectorStore` baseline. |
-| Text extraction | Apache Tika (`spring-ai-tika-document-reader`) | Handles DOCX/TXT parsing |
-| Image OCR | Tesseract via Tess4J | Extracts literal text from images |
+| Text extraction | Apache Tika (`AutoDetectParser`, via a single consolidated `TikaGenericExtractor`) | Handles DOC/DOCX, PDF, TXT, CSV, JSON, MD, XLS/XLSX, PPT/PPTX — one extractor class, no new dependencies per format. See [Extractor Architecture](#extractor-architecture) below. |
+| Image OCR | Tesseract via Tess4J | Extracts literal text from images (PNG/JPG/TIFF) |
 | Text splitting | Spring AI `TokenTextSplitter` | Token-aware chunking (not naive character count) |
+| Chat memory | `JdbcChatMemoryRepository` (Postgres-backed, table `spring_ai_chat_memory`) | Persists conversation history across restarts — confirmed via a dedicated restart test, see [Regression Testing](#regression-testing-file-types-dedup-multimodal-restart-persistence) |
+| Deduplication | `FileDeduplicationService` (MD5 hash, table `ingested_files`) | Prevents re-ingesting the same file twice; returns `409` on a repeat upload |
 
 ---
 
@@ -44,31 +46,66 @@ User question → Embed question → Similarity search (top-k) → Build prompt 
 ```
 com.petclinic.rag
 ├── controller/
-│   ├── HealthController          — health check endpoint
-│   ├── IngestController          — POST /api/documents (TXT/DOCX/image via OCR)
+│   ├── IngestController           — POST /api/documents (all Tika-handled formats + OCR image)
 │   ├── MultimodalIngestController — POST /api/documents/multimodal-image
-│   └── QueryController           — POST /api/query
+│   └── QueryController            — POST /api/query
 ├── service/
 │   ├── extraction/
 │   │   ├── TextExtractor          — common interface (Strategy pattern)
-│   │   ├── TxtExtractor
-│   │   ├── DocxExtractor          — wraps Apache Tika
-│   │   ├── ImageOcrExtractor      — wraps Tesseract/Tess4J
-│   │   └── ExtractorFactory       — picks the right extractor by filename
+│   │   ├── TikaGenericExtractor   — wraps Tika's AutoDetectParser; handles .doc .docx .pdf .txt .csv .json .md .xls .xlsx .ppt .pptx
+│   │   ├── ImageOcrExtractor      — wraps Tesseract/Tess4J; handles .png .jpg .tiff
+│   │   └── ExtractorFactory       — picks the right extractor by filename (unchanged by the consolidation)
 │   ├── vectorstore/
 │   │   ├── JVectorStore           — custom VectorStore impl (Task 1 candidate)
 │   │   ├── VectorDocumentEntity   — ObjectBox @Entity for vector-indexed chunks
 │   │   └── ObjectBoxVectorStore   — custom VectorStore impl (Task 1 candidate)
 │   ├── ChunkingService            — wraps TokenTextSplitter
+│   ├── FileDeduplicationService   — MD5 hash check against ingested_files, returns 409 on repeat upload
 │   ├── MultimodalImageService     — handles the image-embedding-only path
+│   ├── CompressingChatMemory      — chat history compression (not covered by this session's regression testing)
+│   ├── QueryRewriter               — query rewriting (not covered by this session's regression testing)
+│   ├── QueryRouter                 — routes a query between retrieval and memory (not covered by this session's regression testing)
+│   ├── QueryTimeVectorSearch      — retrieval-time vector search
 │   └── RagQueryService            — orchestrates retrieval + LLM answer
 ├── dto/
-│   ├── QueryRequest
-│   └── QueryResponse
+│   ├── QueryRequest                — { question, conversationId }
+│   └── QueryResponse               — { answer, sources }
 └── config/
     ├── AiConfig                   — embedding model + vector store beans (see Appendix B for toggling between stores)
-    └── NvidiaEmbeddingModel       — custom EmbeddingModel (see Key Learnings)
+    └── NvidiaEmbeddingModel       — custom EmbeddingModel (see Key Learnings), now with retry logic (3 attempts, 2s backoff) — see Known Limitations
 ```
+
+> Note: `CompressingChatMemory`, `QueryRewriter`, and `QueryRouter` exist in the codebase and are part of the original project scope (conversation memory, history compression, query rewriting), but this session's regression testing did not specifically exercise or verify their behavior — flagged here for a future session rather than silently omitted.
+
+---
+
+## Extractor Architecture
+
+Originally, each file type had its own extractor class (`TxtExtractor`, `DocxExtractor`, a later `PdfExtractor`) — each one was a thin, nearly-identical wrapper around Spring AI's `TikaDocumentReader`. Since Tika's `AutoDetectParser` already natively handles format detection for `.doc .docx .pdf .txt .csv .json .md .xls .xlsx .ppt .pptx` with no additional dependencies, these were consolidated into a single `TikaGenericExtractor`.
+
+```
+Before: TxtExtractor, DocxExtractor, PdfExtractor  (3 near-duplicate classes)
+After:  TikaGenericExtractor                       (1 class, same coverage, 8 more formats for free)
+```
+
+`ImageOcrExtractor` (Tesseract/Tess4J) was extended separately to also support `.tiff`, since Tess4J handles it natively.
+
+**Zero changes were needed** to `ExtractorFactory` or `IngestController` — the existing strategy pattern (Spring auto-wiring `List<TextExtractor>`, `ExtractorFactory` picking the first one whose `supports(filename)` matches) absorbed the refactor cleanly. This is the kind of case where the original design was already correct; it just needed fewer, more general implementations behind the same interface.
+
+Coverage is verified with real, non-fake sample files (verified via `file` command, not renamed placeholders) in `src/test/resources/sample-files/`, one per format, each containing a unique marker string for confirming genuine extraction:
+
+| Format | Sample file | Marker string pattern |
+|---|---|---|
+| DOCX | `sample.docx` | `DOCX_EXTRACTION_TEST_MARKER` |
+| PDF | `sample.pdf` | `PDF_EXTRACTION_TEST_MARKER` |
+| XLSX | `sample.xlsx` | `XLSX_EXTRACTION_TEST_MARKER` |
+| PPTX | `sample.pptx` | `PPTX_EXTRACTION_TEST_MARKER` |
+| CSV | `sample.csv` | `CSV_EXTRACTION_TEST_MARKER` |
+| JSON | `sample.json` | `JSON_EXTRACTION_TEST_MARKER` |
+| MD | `sample.md` | `MD_EXTRACTION_TEST_MARKER` |
+| TIFF (OCR) | `sample.tiff` | `TIFF_EXTRACTION_TEST_MARKER` |
+
+Test coverage: `TikaGenericExtractorTest` (unit, synthetic content for txt/csv/json/md), `TikaGenericExtractorIntegrationTest` (real binary sample files), `ImageOcrExtractorTest`, `ExtractorFactoryTest` — all passing.
 
 ---
 
@@ -86,8 +123,46 @@ com.petclinic.rag
 | Query endpoint (`/api/query`) | ✅ Done | Full round trip: uploaded a RAG-related paragraph, asked "What is retrieval augmented generation?", got a correct grounded answer citing the right source file |
 | Image OCR extraction | ✅ Done | Generated a test image with known text, uploaded it, OCR extracted 74 characters matching the source sentence, query correctly retrieved and answered from it |
 | Multimodal image embedding | ✅ Done | Verified via curl against NVIDIA directly first, then confirmed working through the app's `/api/documents/multimodal-image` endpoint |
+| PDF / XLSX / PPTX / CSV / JSON / MD extraction | ✅ Done | Extractor consolidated into `TikaGenericExtractor`; each format has a real sample file with a unique marker string in `src/test/resources/sample-files/`, verified via unit + integration tests and a full ingest→query round trip |
+| TIFF image support | ✅ Done | Extended into `ImageOcrExtractor`, no new dependency |
+| Deduplication (`FileDeduplicationService`) | ✅ Done | Re-uploading the same file returns `409` with `status: "skipped"`; confirmed via both terminal and website UI |
+| Chat memory persistence (`JdbcChatMemoryRepository`) | ✅ Done | Restart persistence test (see [Regression Testing](#regression-testing-file-types-dedup-multimodal-restart-persistence)) — fact recalled correctly after a full app restart, with `sources: []` proving it came from memory, not retrieval |
+| Full regression sweep (all 8 formats + dedup + multimodal + OCR + query) | ✅ Done | Clean-slate: `TRUNCATE`'d all three tables, full rebuild + restart, re-tested everything via both terminal (curl) and the website UI |
 
-**Summary**: both pipelines (ingestion and retrieval) are functionally complete and tested end-to-end across all required file types (TXT, DOCX, PNG/JPG via two different strategies), and re-verified working against the final chosen vector store (PGvector).
+**Summary**: both pipelines (ingestion and retrieval) are functionally complete and tested end-to-end across all supported file types (DOC/DOCX, PDF, TXT, CSV, JSON, MD, XLS/XLSX, PPT/PPTX, PNG/JPG/TIFF via OCR, PNG/JPG via multimodal), re-verified working against the final chosen vector store (PGvector), and confirmed to persist correctly across a full application restart for both the vector store and chat memory.
+
+---
+
+## Regression Testing: file types, dedup, multimodal, restart persistence
+
+A full clean-slate regression pass was run after the extractor consolidation and dedup/chat-memory additions, to confirm nothing regressed:
+
+**Setup**: `TRUNCATE`'d `vector_store`, `ingested_files`, and `spring_ai_chat_memory`, full rebuild + app restart.
+
+**Tested via both terminal (curl) and the website UI**, since the app needs to be demoed to the team lead through the UI, not just the API:
+
+| Check | Result |
+|---|---|
+| All 8 file types ingest correctly | ✅ Pass |
+| Dedup returns `409 skipped` on re-upload | ✅ Pass |
+| Multimodal image — photo-type | ✅ Pass |
+| Multimodal image — diagram-type | ⚠️ Known limitation (see [Known Limitations](#known-limitations)) |
+| OCR image path | ✅ Pass |
+| Full ingest → query cycle, grounded answer with sources | ✅ Pass |
+| **Restart persistence — vector store AND chat memory** | ✅ Pass |
+
+**Restart persistence test detail** (the most important check — this is what actually proves the persistence claims above, not just that the app happens to keep working):
+
+1. Pre-restart: sent a query establishing a fact in a specific `conversationId` ("remember `XLSX_EXTRACTION_TEST_MARKER`")
+2. Full app restart (Postgres container left running)
+3. Post-restart: queried the *same* `conversationId` and asked what fact was given
+4. **Result**: the fact was recalled correctly, with `sources: []` — proving the answer came from `JdbcChatMemoryRepository`, not a fresh vector retrieval. A clean, unambiguous pass.
+
+---
+
+## API Reference
+
+A Postman collection covering all endpoints (ingestion for all 8 formats, multimodal image, dedup demo, and the query/RAG cycle with conversation-memory examples) is available in `postman/Petclinic-RAG-POC.postman_collection.json`. Import it directly into Postman — collection variables `base_url` and `conversation_id` are pre-configured.
 
 ---
 
@@ -173,17 +248,48 @@ Documenting these because each one was a real, non-obvious issue worth rememberi
 
 19. **IntelliJ run configurations do not inherit shell environment variables** (like `NVIDIA_API_KEY` exported in `.zshrc`) — they must be set explicitly per run configuration (or in the shared configuration template) inside IntelliJ, or the app fails at startup with a `PlaceholderResolutionException`.
 
+20. **`tess4j:5.11.0` transitively pulls an old `pdfbox:3.0.1`, which breaks PDF parsing once Tika is added.** Adding PDF support via `TikaDocumentReader` failed at runtime with `NoSuchMethodError: PDF2XHTML.setIgnoreContentStreamSpaceGlyphs()` — the root cause is that `tika-parser-pdf-module:3.3.1` requires PDFBox 3.0.3+, but `tess4j` silently downgrades it via a transitive dependency. Same failure pattern as an earlier `commons-io` version conflict, also caused by `tess4j`. Fix: add an explicit `org.apache.pdfbox:pdfbox:3.0.5` dependency to `pom.xml` to force the correct version, confirmed via `mvn dependency:tree -Dincludes=org.apache.pdfbox`.
+
+21. **Nearly-identical single-format extractor classes are a maintainability smell when the underlying library already handles format detection.** `TxtExtractor`, `DocxExtractor`, and the new `PdfExtractor` were all just thin wrappers around `TikaDocumentReader` with no format-specific logic. Since Tika's `AutoDetectParser` already natively handles `.doc .docx .pdf .txt .csv .json .md .xls .xlsx .ppt .pptx` with no additional dependencies, all three were consolidated into a single `TikaGenericExtractor`. The `ExtractorFactory`'s strategy pattern (Spring auto-wiring `List<TextExtractor>`) absorbed the change with zero modification needed to the factory or the controller — a case where the existing pattern was already sound and just needed fewer, more general implementations behind it.
+
+22. **`FileDeduplicationService` and `JdbcChatMemoryRepository` both require Postgres regardless of which `VectorStore` bean is active** — they were added after Task 1's vector store comparison, and are wired independently of the `vectorStore` bean. This means the "zero external infrastructure" claim from Task 1's JVector/ObjectBox findings (see [Comparison Table](#comparison-table)) **no longer holds for the app as a whole** — it's now only true for vector storage specifically. Following the old runbook's step to stop Postgres while testing JVector/ObjectBox causes Spring Boot to silently fall back to embedded H2, which doesn't understand Postgres/pgvector SQL syntax, producing a `BadSqlGrammarException` on both dedup checks and vector similarity search. Fix: keep Postgres running for all four vector store configurations now; only the `vectorStore` bean itself gets toggled.
+
 ---
 
 ## Known Simplifications (for a POC, not production)
 
 - Multimodal image documents are stored with their base64 data URI as the "text" field (needed for the embedding call), rather than separately storing the raw image file with a reference — a production system would separate these.
-- No deduplication — re-uploading the same file creates duplicate chunks.
 - No authentication/authorization on any endpoint.
 - Chunking always uses default parameters; not yet tuned per file type.
 - JVector's implementation rebuilds its entire graph index on every `add()` call rather than inserting incrementally — acceptable for PoC-scale document counts, not for production volume.
 - Neither JVector's nor ObjectBox's custom `VectorStore` implementations support Spring AI's metadata `Filter.Expression` delete/search API — both currently throw `UnsupportedOperationException` for that path.
 - JVector has no persistence layer implemented in this PoC (data is lost on every restart) — a real follow-up task, not a limitation of the JVector library itself.
+
+---
+
+## Known Limitations
+
+### NVIDIA multimodal embedding: diagram-type images fail consistently
+
+NVIDIA's multimodal embedding endpoint (`nvidia/llama-nemotron-embed-vl-1b-v2`) intermittently returns `502 Bad Gateway: {"error": "timed out"}` after roughly 120 seconds — but this isn't random flakiness across all images. Repeated, targeted testing narrowed it down to a specific pattern:
+
+- **Dense, diagram/screenshot-style images (sharp edges, dense text) fail consistently** — the same test image (`spring-ai.png`, a 107KB architecture diagram) failed 3 out of 3 times.
+- **Real photographs of a similar file size succeed reliably**, typically in under 1 second (`test_sample.png`).
+
+Ruled out as the cause: file size alone (107KB is not large), pixel dimensions alone (no clean threshold emerged — 483×708 fails, but other dimension tests were inconsistent), and image format (both PNG and JPEG fail for diagram-type content).
+
+**Conclusion**: this behaves like a genuine backend limitation or bug on NVIDIA's side specific to dense/diagram-style image content, not something fixable from the client. Retry logic was added to `NvidiaEmbeddingModel.call()` (3 attempts, 2s backoff, retrying on 5xx/`HttpServerErrorException` and I/O timeouts, failing fast on 4xx) — this helps with genuine transient flakiness but does **not** resolve the diagram-specific consistent failure.
+
+**Practical takeaway**: avoid live-demoing multimodal image upload with diagram or screenshot-type images. Use photo-type images for reliable demo results.
+
+### "Zero external infrastructure" no longer applies to the whole app
+
+Task 1's comparison table (above) lists JVector and ObjectBox as requiring no external infrastructure — that was accurate for vector storage at the time it was written, but two features added afterward changed this:
+
+- `FileDeduplicationService` (table `ingested_files`)
+- `JdbcChatMemoryRepository` (table `spring_ai_chat_memory`)
+
+Both are wired independently of the `vectorStore` bean and require Postgres regardless of which vector store is active. So "zero external infra" now only holds for the vector-storage layer specifically — the app as a whole always needs Postgres. See Key Learning #22 for the full detail, including the `BadSqlGrammarException` failure mode this caused when following the old runbook's "stop Postgres" step for JVector/ObjectBox testing.
 
 ---
 
