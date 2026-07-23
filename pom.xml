@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
@@ -29,6 +29,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
+		<objectboxVersion>5.4.2</objectboxVersion>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -50,6 +51,33 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-tika-document-reader</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-vector-store</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.sourceforge.tess4j</groupId>
+			<artifactId>tess4j</artifactId>
+			<version>5.11.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.github.jbellis</groupId>
+			<artifactId>jvector</artifactId>
+			<version>4.0.0-rc.8-hf1</version>
 		</dependency>
 
 		<dependency>
@@ -83,6 +111,40 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>io.objectbox</groupId>
+			<artifactId>objectbox-java</artifactId>
+			<version>${objectboxVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.objectbox</groupId>
+			<artifactId>objectbox-macos</artifactId>
+			<version>${objectboxVersion}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.6.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-rag</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.19.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.5</version>
+		</dependency>
+
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
@@ -121,12 +183,26 @@
 							<goal>compile</goal>
 						</goals>
 						<configuration>
+							<!--
+							MERGED: both Lombok and ObjectBox annotation processors must run in
+							the SAME execution/configuration block. Two separate maven-compiler-plugin
+							<plugin> entries would collide on plugin coordinates and one would silently
+							override the other, breaking either Lombok or ObjectBox code generation.
+							-->
 							<annotationProcessorPaths>
 								<path>
 									<groupId>org.projectlombok</groupId>
 									<artifactId>lombok</artifactId>
 								</path>
+								<path>
+									<groupId>io.objectbox</groupId>
+									<artifactId>objectbox-processor</artifactId>
+									<version>${objectboxVersion}</version>
+								</path>
 							</annotationProcessorPaths>
+							<compilerArgs>
+								<arg>-Aobjectbox.modelPath=${project.basedir}/objectbox-models/default.json</arg>
+							</compilerArgs>
 						</configuration>
 					</execution>
 					<execution>

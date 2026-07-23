@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PetClinic RAG — Document Q&A</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+    <header>
+        <div class="eyebrow">PetClinic RAG</div>
+        <h1>Ask your documents</h1>
+        <p class="subtitle">Upload files, then ask questions answered strictly from what you've uploaded — with the exact sources cited.</p>
+
+        <div class="pipeline">
+            <span class="pipeline-label">How it works</span>
+            <span class="step"><span class="dot"></span>Extract</span>
+            <span class="step arrow">→</span>
+            <span class="step"><span class="dot"></span>Chunk</span>
+            <span class="step arrow">→</span>
+            <span class="step"><span class="dot"></span>Embed</span>
+            <span class="step arrow">→</span>
+            <span class="step"><span class="dot"></span>Store</span>
+            <span class="step arrow" style="margin-left: 14px;">|</span>
+            <span class="step"><span class="dot"></span>Retrieve</span>
+            <span class="step arrow">→</span>
+            <span class="step"><span class="dot"></span>Answer</span>
+        </div>
+    </header>
+
+    <div class="grid">
+
+        <section class="card">
+            <h2>Add a document</h2>
+            <p class="hint">TXT, DOCX, PNG, or JPG</p>
+
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a file">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+                <div class="main">Drop a file, or click to browse</div>
+                <div class="sub">One file at a time</div>
+            </div>
+            <input type="file" id="fileInput" accept=".txt,.docx,.png,.jpg,.jpeg">
+
+            <div class="strategy-toggle" id="strategyToggle">
+                <input type="checkbox" id="multimodalCheck">
+                <label for="multimodalCheck">Embed image directly (skip OCR) — for photos, charts, diagrams</label>
+            </div>
+
+            <button class="btn" id="uploadBtn" disabled>Upload</button>
+            <div class="error-text" id="uploadError"></div>
+
+            <div class="file-list" id="fileList"></div>
+        </section>
+
+        <section class="card">
+            <h2>Ask a question</h2>
+            <p class="hint">Answered only from what you've uploaded</p>
+
+            <textarea id="questionInput" placeholder="What does the document say about…"></textarea>
+            <button class="btn" id="askBtn">Ask</button>
+            <div class="error-text" id="askError"></div>
+
+            <div class="answer-block" id="answerBlock">
+                <div class="answer-text" id="answerText"></div>
+                <div class="evidence-label" id="evidenceLabel"></div>
+                <div id="evidenceList"></div>
+            </div>
+        </section>
+
+    </div>
+
+    <section class="history-section">
+        <h2>History</h2>
+        <div id="historyContainer">
+            <div class="empty-state" id="emptyHistory">Questions you ask will appear here.</div>
+        </div>
+    </section>
+
+</div>
+
+<script src="js/app.js" defer></script>
+</body>
+</html>

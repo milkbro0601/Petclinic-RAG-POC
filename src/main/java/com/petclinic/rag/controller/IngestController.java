@@ -1,0 +1,95 @@
+package com.petclinic.rag.controller;
+
+import com.petclinic.rag.service.ChunkingService;
+import com.petclinic.rag.service.FileDeduplicationService;
+import com.petclinic.rag.service.extraction.ExtractorFactory;
+import com.petclinic.rag.service.extraction.TextExtractor;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+public class IngestController {
+
+    private static final String INGESTION_TYPE = "text";
+
+    private final ExtractorFactory extractorFactory;
+    private final ChunkingService chunkingService;
+    private final VectorStore vectorStore;
+    private final FileDeduplicationService deduplicationService;
+
+    public IngestController(ExtractorFactory extractorFactory, ChunkingService chunkingService,
+                            VectorStore vectorStore, FileDeduplicationService deduplicationService) {
+        this.extractorFactory = extractorFactory;
+        this.chunkingService = chunkingService;
+        this.vectorStore = vectorStore;
+        this.deduplicationService = deduplicationService;
+    }
+
+    @PostMapping("/api/documents")
+    public ResponseEntity<Map<String, Object>> ingest(@RequestParam("file") MultipartFile file) {
+
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Uploaded file is empty."));
+        }
+
+        String filename = file.getOriginalFilename();
+
+        try {
+            byte[] fileBytes = file.getBytes();
+            String fileHash = deduplicationService.computeHash(fileBytes);
+
+            if (deduplicationService.isAlreadyIngested(fileHash, INGESTION_TYPE)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of(
+                                "filename", filename,
+                                "status", "skipped",
+                                "reason", "This exact file has already been ingested."
+                        ));
+            }
+
+            TextExtractor extractor = extractorFactory.getExtractor(filename);
+            String extractedText = extractor.extract(new ByteArrayInputStream(fileBytes), filename);
+
+            if (extractedText == null || extractedText.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "No text could be extracted from: " + filename));
+            }
+
+            Document document = new Document(extractedText, Map.of("source", filename));
+            List<Document> chunks = chunkingService.chunk(document);
+            vectorStore.add(chunks);
+            deduplicationService.markIngested(fileHash, filename, INGESTION_TYPE);
+
+            return ResponseEntity.ok(Map.of(
+                    "filename", filename,
+                    "extractedCharacters", extractedText.length(),
+                    "chunksStored", chunks.size(),
+                    "status", "stored"
+            ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                    .body(Map.of("error", e.getMessage()));
+
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to read uploaded file: " + e.getMessage()));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Ingestion failed: " + e.getMessage()));
+        }
+    }
+}
